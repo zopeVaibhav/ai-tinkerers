@@ -37,5 +37,8 @@ export function save(): void {
             list.filter((view) => view.surface !== "web"),
         ]),
     );
-    writeFileSync(FILE, JSON.stringify({ objects: snapshotObjects(), views } satisfies Snapshot, null, 2));
+    writeFileSync(
+        FILE,
+        JSON.stringify({ objects: snapshotObjects(), views } satisfies Snapshot, null, 2),
+    );
 }
