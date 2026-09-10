@@ -1,4 +1,4 @@
-import { createObject, reduce } from "@repo/core";
+import { createObject, isValid, reduce } from "@repo/core";
 import type { Action, SharedObject } from "@repo/types";
 
 type Listener = (object: SharedObject) => void;
@@ -20,10 +20,26 @@ export function getObject(id: string): SharedObject {
  * Applying an action fires one change event; fan-out happens in the caller.
  */
 export function apply(id: string, action: Action): SharedObject {
-    const next = reduce(getObject(id), action);
+    const current = getObject(id);
+
+    // A tap against a state that has already moved on changes nothing.
+    if (!isValid(current, action)) {
+        console.log(`ignored stale ${action.type} from ${action.by}`);
+        return current;
+    }
+
+    const next = reduce(current, action);
     objects.set(id, next);
     for (const listener of listeners) listener(next);
     return next;
+}
+
+/** Start the object over. Needed for repeated demo takes, not for production. */
+export function reset(id: string): SharedObject {
+    const fresh = createObject(id);
+    objects.set(id, fresh);
+    for (const listener of listeners) listener(fresh);
+    return fresh;
 }
 
 export function onChange(listener: Listener): () => void {

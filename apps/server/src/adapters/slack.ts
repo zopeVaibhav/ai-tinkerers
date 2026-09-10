@@ -116,7 +116,14 @@ export async function updateSlack(object: SharedObject) {
                 blocks: renderSlack(object) as never[],
             });
         } catch (error) {
-            console.error("slack update failed:", (error as Error).message);
+            const message = (error as Error).message ?? "";
+            // The card was deleted. Stop trying to render into a dead window.
+            if (message.includes("message_not_found")) {
+                unsubscribe(object.id, (candidate) => candidate === view);
+                console.warn("slack view dropped: message no longer exists");
+                continue;
+            }
+            console.error("slack update failed:", message);
         }
     }
 }

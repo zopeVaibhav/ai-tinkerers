@@ -14,13 +14,13 @@ Last updated: 2026-09-11
 
 **Status:** practice build running. M0-M3 done and verified on all three surfaces.
 
-| Milestone | State |
-|---|---|
+| Milestone               | State                                                          |
+| ----------------------- | -------------------------------------------------------------- |
 | M0 accounts and tunnels | done — Slack Socket Mode, Telegram group, no public URL needed |
-| M1 fan-out | done — one action from any surface moves all three |
-| M2 real object | done — escalation object, Slack modals, editable web canvas |
-| M3 agent | done — intake from raw text, three per-audience framings |
-| M4 rough edges | next |
+| M1 fan-out              | done — one action from any surface moves all three             |
+| M2 real object          | done — escalation object, Slack modals, editable web canvas    |
+| M3 agent                | done — intake from raw text, three per-audience framings       |
+| M4 rough edges          | next                                                           |
 
 Repo: `github.com/zopeVaibhav/ai-tinkerers` (private), work on `dev`.
 

@@ -74,7 +74,14 @@ export async function updateTelegram(object: SharedObject) {
             // Telegram rejects an edit whose content is byte-identical.
             // That is a no-op, not a failure.
             const message = (error as Error).message ?? "";
+            // Editing to identical content is a no-op, not a failure.
             if (message.includes("message is not modified")) continue;
+            // The card was deleted. Stop trying to render into a dead window.
+            if (message.includes("message to edit not found")) {
+                unsubscribe(object.id, (candidate) => candidate === view);
+                console.warn("telegram view dropped: message no longer exists");
+                continue;
+            }
             console.error("telegram update failed:", message);
         }
     }

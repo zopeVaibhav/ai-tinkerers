@@ -2,7 +2,7 @@ import cors from "cors";
 import express from "express";
 import type { Action } from "@repo/types";
 import { ENABLED, ENV } from "./config/env";
-import { apply, getObject, onChange } from "./store";
+import { apply, getObject, onChange, reset } from "./store";
 import { openStream, pushWeb } from "./adapters/web";
 import { startSlack, updateSlack } from "./adapters/slack";
 import { startTelegram, updateTelegram } from "./adapters/telegram";
@@ -27,6 +27,10 @@ app.get("/stream", (req, res) => {
 
 app.post("/action", (req, res) => {
     res.json(dispatch(req.body as Action));
+});
+
+app.post("/reset", (_req, res) => {
+    res.json(reset(OBJECT_ID));
 });
 
 /** Raw, unstructured text from a customer. The agent turns it into facts. */
