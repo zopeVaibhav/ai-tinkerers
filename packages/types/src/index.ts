@@ -18,17 +18,28 @@ export type TimelineEntry = {
     what: string;
 };
 
+export type Severity = "low" | "medium" | "high";
+
+export type Status = "triage" | "awaiting_approval" | "approved" | "resolved";
+
 /**
  * The single source of truth. Every surface renders this and nothing else.
- * `facts` is what is true. `framings` is the agent's per-audience wording.
- * Renderers read both, but never call a model.
+ *
+ * `facts` is what is true — deterministic, written by actions.
+ * `framings` is the agent's per-audience wording of those same facts.
+ * Renderers read both. Renderers never call a model.
  */
 export type SharedObject = {
     id: string;
     version: number;
     facts: {
-        count: number;
-        status: "open" | "awaiting_approval" | "resolved";
+        what: string;
+        severity: Severity;
+        affected: number;
+        acknowledgedBy: string | null;
+        proposedFix: string | null;
+        approvedBy: string | null;
+        status: Status;
     };
     framings: Partial<Record<Audience, string>>;
     timeline: TimelineEntry[];
@@ -39,6 +50,11 @@ export type SharedObject = {
  * before it touches the store. Nothing downstream knows which app it came from.
  */
 export type Action =
-    | { type: "increment"; by: string }
-    | { type: "decrement"; by: string }
-    | { type: "reset"; by: string };
+    | { type: "intake"; by: string; what: string; severity: Severity; affected: number }
+    | { type: "acknowledge"; by: string }
+    | { type: "propose"; by: string; fix: string }
+    | { type: "approve"; by: string }
+    | { type: "reject"; by: string; reason: string }
+    | { type: "resolve"; by: string }
+    | { type: "note"; by: string; text: string }
+    | { type: "reframe"; by: string; framings: Partial<Record<Audience, string>> };
