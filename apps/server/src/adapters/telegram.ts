@@ -15,8 +15,9 @@ export async function startTelegram(
 
     instance.on("callback_query:data", async (ctx) => {
         await ctx.answerCallbackQuery();
-        const type = ctx.callbackQuery.data as Action["type"];
-        dispatch({ type, by: ctx.from?.first_name ?? "telegram" });
+        const by = ctx.from?.first_name ?? "telegram";
+        const action = toAction(ctx.callbackQuery.data, by);
+        if (action) dispatch(action);
     });
 
     // Long polling. Never await this — it only settles when the bot stops.
@@ -68,5 +69,24 @@ export async function updateTelegram(object: SharedObject) {
             if (message.includes("message is not modified")) continue;
             console.error("telegram update failed:", message);
         }
+    }
+}
+
+/**
+ * The phone surface offers no typing. Reject carries a fixed reason rather
+ * than opening a text prompt — the point of this surface is one tap.
+ */
+function toAction(data: string, by: string): Action | null {
+    switch (data) {
+        case "acknowledge":
+            return { type: "acknowledge", by };
+        case "approve":
+            return { type: "approve", by };
+        case "resolve":
+            return { type: "resolve", by };
+        case "reject":
+            return { type: "reject", by, reason: "rejected from mobile" };
+        default:
+            return null;
     }
 }
