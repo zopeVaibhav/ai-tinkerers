@@ -12,7 +12,20 @@ Last updated: 2026-09-11
 
 **Not building:** a bot in Slack. A bridge between apps. A unified inbox.
 
-**Status:** idea locked. Prior art checked, survived. Next step is M0 setup.
+**Status:** practice build running. M0-M3 done and verified on all three surfaces.
+
+| Milestone | State |
+|---|---|
+| M0 accounts and tunnels | done — Slack Socket Mode, Telegram group, no public URL needed |
+| M1 fan-out | done — one action from any surface moves all three |
+| M2 real object | done — escalation object, Slack modals, editable web canvas |
+| M3 agent | done — intake from raw text, three per-audience framings |
+| M4 rough edges | next |
+
+Repo: `github.com/zopeVaibhav/ai-tinkerers` (private), work on `dev`.
+
+**Known behaviour, not a bug:** cards update silently in place. They never bump
+or re-notify. Keep them on screen during the demo or it looks like nothing happened.
 
 ---
 
