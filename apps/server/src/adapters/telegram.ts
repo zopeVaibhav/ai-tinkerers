@@ -13,6 +13,14 @@ export async function startTelegram(
 ) {
     const instance = new Bot(ENV.TELEGRAM_BOT_TOKEN);
 
+    // Any inbound update names its chat. Handy when a group is created or
+    // silently upgraded to a supergroup, which changes the chat id.
+    instance.use(async (ctx, next) => {
+        const chat = ctx.chat;
+        if (chat) console.log(`telegram chat seen: id=${chat.id} type=${chat.type}`);
+        await next();
+    });
+
     instance.on("callback_query:data", async (ctx) => {
         await ctx.answerCallbackQuery();
         const by = ctx.from?.first_name ?? "telegram";

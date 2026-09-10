@@ -10,7 +10,9 @@ const schema = z.object({
     SLACK_CHANNEL_ID: z.string().default(""),
     TELEGRAM_BOT_TOKEN: z.string().default(""),
     TELEGRAM_CHAT_ID: z.string().default(""),
-    OPENROUTER_API_KEY: z.string().default(""),
+    LLM_API_KEY: z.string().default(""),
+    LLM_BASE_URL: z.string().default("https://api.openai.com/v1"),
+    LLM_MODEL: z.string().default("gpt-4.1-mini"),
     SERVER_PORT: z.coerce.number().default(5101),
 });
 
@@ -30,4 +32,5 @@ export const ENV = parsed.data;
 export const ENABLED = {
     slack: Boolean(ENV.SLACK_BOT_TOKEN && ENV.SLACK_APP_TOKEN && ENV.SLACK_CHANNEL_ID),
     telegram: Boolean(ENV.TELEGRAM_BOT_TOKEN && ENV.TELEGRAM_CHAT_ID),
+    agent: Boolean(ENV.LLM_API_KEY),
 };

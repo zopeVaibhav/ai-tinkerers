@@ -23,6 +23,8 @@ export default function Page() {
     const [affected, setAffected] = useState(0);
     const [fix, setFix] = useState("");
     const [note, setNote] = useState("");
+    const [report, setReport] = useState("");
+    const [thinking, setThinking] = useState(false);
     const seeded = useRef(false);
 
     useEffect(() => {
@@ -44,6 +46,21 @@ export default function Page() {
     function rename(value: string) {
         setName(value);
         localStorage.setItem("name", value);
+    }
+
+    async function sendReport() {
+        if (!report.trim()) return;
+        setThinking(true);
+        try {
+            await fetch(`${SERVER}/report`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: report, from: "customer" }),
+            });
+            setReport("");
+        } finally {
+            setThinking(false);
+        }
     }
 
     async function send(action: Draft<Action>) {
@@ -79,6 +96,26 @@ export default function Page() {
                         <span className="text-neutral-500">
                             owner {facts.acknowledgedBy ?? "unassigned"} · v{object.version}
                         </span>
+                    </section>
+
+                    <section className="flex flex-col gap-3 rounded-xl border border-dashed border-neutral-300 p-5">
+                        <h2 className="text-sm font-medium text-neutral-500">
+                            Inbound customer message
+                        </h2>
+                        <textarea
+                            value={report}
+                            onChange={(event) => setReport(event.target.value)}
+                            rows={3}
+                            placeholder="paste what the customer actually wrote, in their words"
+                            className="rounded-lg border border-neutral-300 px-3 py-2"
+                        />
+                        <button
+                            onClick={sendReport}
+                            disabled={thinking}
+                            className="self-start rounded-lg bg-neutral-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+                        >
+                            {thinking ? "reading…" : "Hand to agent"}
+                        </button>
                     </section>
 
                     <section className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-5">
@@ -157,6 +194,26 @@ export default function Page() {
                             )}
                         </div>
                     </section>
+
+                    {Object.keys(object.framings).length > 0 && (
+                        <section className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-5">
+                            <h2 className="text-sm font-medium text-neutral-500">
+                                Same facts, three readers
+                            </h2>
+                            <div className="grid gap-3 sm:grid-cols-3">
+                                {(["engineer", "lead", "customer"] as const).map((audience) => (
+                                    <div key={audience} className="flex flex-col gap-1">
+                                        <span className="text-xs uppercase tracking-wide text-neutral-400">
+                                            {audience}
+                                        </span>
+                                        <p className="text-sm text-neutral-700">
+                                            {object.framings[audience] ?? "—"}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    )}
 
                     <section className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-5">
                         <h2 className="text-sm font-medium text-neutral-500">Timeline</h2>

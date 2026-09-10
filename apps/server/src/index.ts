@@ -6,6 +6,7 @@ import { apply, getObject, onChange } from "./store";
 import { openStream, pushWeb } from "./adapters/web";
 import { startSlack, updateSlack } from "./adapters/slack";
 import { startTelegram, updateTelegram } from "./adapters/telegram";
+import { intake, reframe } from "./agent";
 import { load, save } from "./persist";
 
 const OBJECT_ID = "demo";
@@ -28,9 +29,43 @@ app.post("/action", (req, res) => {
     res.json(dispatch(req.body as Action));
 });
 
+/** Raw, unstructured text from a customer. The agent turns it into facts. */
+app.post("/report", async (req, res) => {
+    const { text, from } = req.body as { text?: string; from?: string };
+    if (!text?.trim()) return res.status(400).json({ error: "text is required" });
+    if (!ENABLED.agent) return res.status(503).json({ error: "agent is not configured" });
+
+    const action = await intake(text, from ?? "customer");
+    if (!action) return res.status(502).json({ error: "agent could not read that message" });
+    return res.json(dispatch(action));
+});
+
 /** The single write path. Every surface and the agent come through here. */
 function dispatch(action: Action) {
-    return apply(OBJECT_ID, action);
+    const object = apply(OBJECT_ID, action);
+    if (shouldReframe(action)) void rewrite();
+    return object;
+}
+
+/**
+ * Framings are the agent's wording of the facts, so they are refreshed
+ * whenever the facts move — and never in response to its own writes.
+ */
+function shouldReframe(action: Action): boolean {
+    return ENABLED.agent && action.type !== "reframe" && action.type !== "note";
+}
+
+let rewriting = false;
+
+async function rewrite() {
+    if (rewriting) return;
+    rewriting = true;
+    try {
+        const action = await reframe(getObject(OBJECT_ID));
+        if (action) apply(OBJECT_ID, action);
+    } finally {
+        rewriting = false;
+    }
 }
 
 /**
