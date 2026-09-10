@@ -1,7 +1,7 @@
 # Shared object
 
 One live object, rendered natively on every surface each person already uses.
-Change it anywhere, it updates everywhere. See `IDEA.md` for the full brief.
+Change it anywhere, it updates everywhere. See `ref/IDEA.md` for the full brief.
 
 ## Layout
 
