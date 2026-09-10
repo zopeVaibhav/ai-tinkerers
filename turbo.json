@@ -1,0 +1,25 @@
+{
+    "$schema": "https://turborepo.dev/schema.json",
+    "ui": "tui",
+    "globalEnv": [
+        "NODE_ENV",
+        "SLACK_BOT_TOKEN",
+        "SLACK_APP_TOKEN",
+        "SLACK_CHANNEL_ID",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID",
+        "OPENROUTER_API_KEY",
+        "WEB_PORT",
+        "SERVER_PORT",
+        "NEXT_PUBLIC_SERVER_URL"
+    ],
+    "tasks": {
+        "build": {
+            "dependsOn": ["^build"],
+            "inputs": ["$TURBO_DEFAULT$", ".env*"],
+            "outputs": [".next/**", "!.next/cache/**"]
+        },
+        "typecheck": { "dependsOn": ["^typecheck"] },
+        "dev": { "cache": false, "persistent": true }
+    }
+}
