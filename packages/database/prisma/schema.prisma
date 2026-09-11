@@ -1,0 +1,91 @@
+generator client {
+    provider = "prisma-client-js"
+    output   = "../generated/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+enum Severity {
+    low
+    medium
+    high
+}
+
+enum Status {
+    triage
+    awaiting_approval
+    approved
+    resolved
+}
+
+enum Surface {
+    slack
+    telegram
+    web
+}
+
+enum Audience {
+    engineer
+    lead
+    customer
+}
+
+/// One shared object. Every surface renders this and nothing else.
+model Issue {
+    id        String   @id @default(cuid())
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    version   Int      @default(0)
+
+    raisedBy String
+    raisedOn Surface
+
+    what           String
+    severity       Severity @default(low)
+    affected       Int      @default(0)
+    acknowledgedBy String?
+    proposedFix    String?
+    approvedBy     String?
+    status         Status   @default(triage)
+
+    /// The agent's wording of the same facts, keyed by audience.
+    framings Json @default("{}")
+
+    timeline Event[]
+    views    View[]
+
+    @@index([status, createdAt])
+}
+
+/// Append-only. One row per applied action.
+model Event {
+    id      String   @id @default(cuid())
+    issueId String
+    issue   Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+    at      DateTime @default(now())
+    by      String
+    what    String
+
+    @@index([issueId, at])
+}
+
+/// A live window onto one issue. Web connections are not persisted; they die
+/// with the browser tab. Only message-backed views survive a restart.
+model View {
+    id       String   @id @default(cuid())
+    issueId  String
+    issue    Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+    surface  Surface
+    audience Audience
+
+    channel   String?
+    ts        String?
+    chatId    BigInt?
+    messageId Int?
+
+    @@unique([issueId, surface, audience, chatId])
+    @@index([issueId])
+}

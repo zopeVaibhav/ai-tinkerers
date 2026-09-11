@@ -11,6 +11,9 @@
     ],
     "scripts": {
         "dev": "turbo run dev",
+        "generate": "turbo run generate",
+        "db:push": "turbo run db:push",
+        "db:studio": "bun run --filter @repo/database studio",
         "build": "turbo run build",
         "typecheck": "turbo run typecheck",
         "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",

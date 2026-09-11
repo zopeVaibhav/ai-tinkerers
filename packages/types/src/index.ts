@@ -28,6 +28,9 @@ export type TimelineEntry = {
 export type SharedObject = {
     id: string;
     version: number;
+    createdAt: string;
+    raisedBy: string;
+    raisedOn: Surface;
     facts: {
         what: string;
         severity: Severity;

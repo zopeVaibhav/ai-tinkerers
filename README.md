@@ -7,10 +7,11 @@ and `ref/RUNBOOK.md` for how to run and test it.
 ## Layout
 
 ```
-apps/web        Next.js 16 — the canvas surface
-apps/server     Bun + Express 5 — store, subscription table, fan-out, adapters, agent
-packages/core   pure: object, reducer, guard, permissions, renderers (no IO, no model calls)
-packages/types  shared enums and contracts
+apps/web          Next.js 16 — issue list and detail canvas
+apps/server       Bun + Express 5 — repository, fan-out, adapters, agent
+packages/core     pure: reducer, guard, permissions, renderers (no IO, no model calls)
+packages/database Prisma schema and client (Postgres)
+packages/types    shared enums and contracts
 ```
 
 ## Surfaces
@@ -43,11 +44,25 @@ call logs and skips; the rest keeps working.
 ## Commands
 
 ```bash
+docker compose up -d   # Postgres on :5433
 bun install
-bun run dev          # turbo: web on :5100, server on :5101
+bun run generate       # prisma generate
+bun run db:push        # sync schema
+bun run dev            # web on :5100, server on :5101
+bun run db:studio      # prisma studio
 bun run typecheck
 bun run format
 ```
+
+## Working as a team
+
+Telegram allows exactly one poller per bot token, and Slack delivers each Socket
+Mode event to exactly one connection. Two people running the server against the
+same tokens will steal each other's events, whatever the database says.
+
+So each developer gets their own sandbox: their own Telegram bot from BotFather,
+their own group, and their own Slack channel. Same code, different `.env`. Keep
+one shared channel and bot for demos, used by one machine at a time.
 
 ## Setup
 

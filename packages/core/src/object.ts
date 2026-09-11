@@ -1,10 +1,13 @@
-import { Severity, Status } from "@repo/types";
+import { Severity, Status, Surface } from "@repo/types";
 import type { SharedObject } from "@repo/types";
 
-export function createObject(id: string): SharedObject {
+export function createObject(id: string, raisedBy: string, raisedOn: Surface): SharedObject {
     return {
         id,
         version: 0,
+        createdAt: new Date().toISOString(),
+        raisedBy,
+        raisedOn,
         facts: {
             what: "Nothing reported yet",
             severity: Severity.Low,

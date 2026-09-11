@@ -13,7 +13,9 @@ const intakeSchema = z.object({
     affected: z.number().int().min(0),
 });
 
-export async function intake(raw: string, from: string): Promise<Action | null> {
+type IntakeAction = Extract<Action, { type: ActionType.Intake }>;
+
+export async function intake(raw: string, from: string): Promise<IntakeAction | null> {
     const result = await ask(
         [
             "You triage inbound customer reports for a software team.",

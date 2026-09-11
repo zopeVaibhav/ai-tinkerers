@@ -30,6 +30,7 @@ export function renderSlack(object: SharedObject): unknown[] {
                 { type: "mrkdwn", text: `*Users affected*\n${facts.affected}` },
                 { type: "mrkdwn", text: `*Status*\n${STATUS_LABEL[facts.status]}` },
                 { type: "mrkdwn", text: `*Owner*\n${facts.acknowledgedBy ?? "unassigned"}` },
+                { type: "mrkdwn", text: `*Raised by*\n${object.raisedBy}` },
             ],
         },
     ];
@@ -67,29 +68,32 @@ const STATUS_LABEL: Record<Status, string> = {
 
 function actionsFor(object: SharedObject): unknown[] {
     const { status, acknowledgedBy } = object.facts;
+    const id = object.id;
     const buttons: unknown[] = [];
 
     if (status === Status.Triage) {
-        if (!acknowledgedBy) buttons.push(button(ActionType.Acknowledge, "Take it", "primary"));
-        buttons.push(button(ActionType.Propose, "Propose fix"));
+        if (!acknowledgedBy) buttons.push(button(ActionType.Acknowledge, "Take it", id, "primary"));
+        buttons.push(button(ActionType.Propose, "Propose fix", id));
     }
 
     if (status === Status.AwaitingApproval) {
-        buttons.push(button(ActionType.Approve, "Approve", "primary"));
-        buttons.push(button(ActionType.Reject, "Reject", "danger"));
+        buttons.push(button(ActionType.Approve, "Approve", id, "primary"));
+        buttons.push(button(ActionType.Reject, "Reject", id, "danger"));
     }
 
-    if (status === Status.Approved) buttons.push(button(ActionType.Resolve, "Resolve", "primary"));
+    if (status === Status.Approved)
+        buttons.push(button(ActionType.Resolve, "Resolve", id, "primary"));
 
-    if (status !== Status.Resolved) buttons.push(button(ActionType.Note, "Add note"));
+    if (status !== Status.Resolved) buttons.push(button(ActionType.Note, "Add note", id));
 
     return buttons;
 }
 
-function button(actionId: ActionType, text: string, style?: "primary" | "danger") {
+function button(actionId: ActionType, text: string, issueId: string, style?: "primary" | "danger") {
     return {
         type: "button",
         action_id: actionId,
+        value: issueId,
         text: { type: "plain_text", text },
         ...(style ? { style } : {}),
     };
