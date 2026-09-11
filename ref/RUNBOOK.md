@@ -33,6 +33,16 @@ curl -s http://localhost:5101/health
 Expect `{"ok":true,"surfaces":{"slack":true,"telegram":true,"agent":true}}`.
 Any `false` means that surface's credentials are missing from `.env`.
 
+## Three ways to raise an issue
+
+| Where       | How                                                 |
+| ----------- | --------------------------------------------------- |
+| Slack       | `@Shared Object` followed by the customer's message |
+| Telegram DM | message the bot directly — you are the customer     |
+| Web         | the dashed **Inbound customer message** box         |
+
+The Telegram group cannot raise issues. Engineers there tap, they do not file.
+
 ## The full test, start to finish
 
 1. Open `http://localhost:5100`, put your name in the top-right box.
@@ -73,8 +83,16 @@ group to a supergroup and the chat id changed. Send
 terminal (`telegram chat seen: id=...`), and put it in `.env` as
 `TELEGRAM_CHAT_ID`.
 
-**A button did nothing.** Check the terminal for `ignored stale ...`. That is
-correct — someone else already moved the object past that step.
+**A button did nothing.** Check the terminal. Three lines mean it was deliberate:
+
+- `ignored stale <action>` — someone already moved the object past that step
+- `refused <action> from <audience>: not allowed on that surface` — that window
+  has no right to do it
+- `refused approve from <name>: cannot approve own proposal` — get someone else
+  to sign off
+
+**Mentioning the bot in Slack does nothing.** Scopes are not enough. The app also
+needs the bot event `app_mention` subscribed under Event Subscriptions.
 
 **Piles of old cards.** Every card from before the last `.state.json` reset is
 dead. Delete them; only the newest is registered.
