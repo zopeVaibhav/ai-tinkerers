@@ -11,9 +11,11 @@ import {
  * env var both sides read.
  */
 const model = (() => {
-    const name = process.env.LLM_MODEL ?? "gpt-4.1-mini";
+    const name = process.env.LLM_MODEL ?? "openai/gpt-4.1-mini";
     return name.includes("/") ? name : `openai/${name}`;
 })();
+
+console.log(`copilotkit runtime model: ${model}`);
 
 const runtime = new CopilotRuntime({
     agents: {

@@ -38,6 +38,9 @@ export function RegistryCopilot({
                 said: decision.rawText,
                 superseded: Boolean(decision.supersededById),
             })),
+            howToShowAConflict:
+                "Call showConflict with the conflict id exactly as written below, or omit the " +
+                "id when there is only one.",
             conflicts: conflicts.map((conflict) => ({
                 id: conflict.id,
                 status: conflict.status,
