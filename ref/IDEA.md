@@ -12,15 +12,19 @@ Last updated: 2026-09-11
 
 **Not building:** a bot in Slack. A bridge between apps. A unified inbox.
 
-**Status:** practice build running. M0-M3 done and verified on all three surfaces.
+**Status:** practice build running. M0-M4 done and verified across four windows.
 
 | Milestone               | State                                                          |
 | ----------------------- | -------------------------------------------------------------- |
 | M0 accounts and tunnels | done — Slack Socket Mode, Telegram group, no public URL needed |
-| M1 fan-out              | done — one action from any surface moves all three             |
+| M1 fan-out              | done — one action from any window moves all of them            |
 | M2 real object          | done — escalation object, Slack modals, editable web canvas    |
 | M3 agent                | done — intake from raw text, three per-audience framings       |
-| M4 rough edges          | next                                                           |
+| M4 rough edges          | done — stale taps ignored, dead views dropped, `/reset`        |
+| Issue #1                | done — Slack mention intake, customer DM surface, permissions  |
+
+Not built, by choice: multi-object (`OBJECT_ID` is hardcoded; the subscription
+table is already keyed per object), and a second object shape.
 
 Repo: `github.com/zopeVaibhav/ai-tinkerers` (private), work on `dev`.
 
@@ -92,34 +96,40 @@ Nobody shipped the mechanism. Everything found is **shared memory, separate view
 Flow, top to bottom, then loop back:
 
 ```
-  Slack          Telegram        Web app
-  Block Kit      2 buttons       canvas
-     |               |               |
-     +---------------+---------------+
-                     |
-            Action normalizer
-       any tap becomes one action
-                     |
-             Shared object  <---- Agent
-          single source of truth   writes changes
-                     |
-            Subscription table
-           every live view, listed
-                     |
-     +---------------+---------------+
-     |               |               |
-  Block Kit      Telegram         Web
-  chat.update    editMessageText  push
+  Slack        Telegram       Telegram DM      Web
+  mention      group, tap     customer         form
+    |              |               |             |
+    +--------------+---------------+-------------+
+                          |
+                 Action normalizer
+              one shape for every door
+                          |
+              Permission and state guard
+            stale or not allowed = no-op
+                          |
+   Snapshot  <----  Object in memory  <----  Agent
+   .state.json      one map, one truth       writes wording
+                          |
+                 Subscription table
+            object id maps to live views
+                          |
+    +--------------+---------------+-------------+
+    |              |               |             |
+  Block Kit    Telegram        Telegram DM      Web
+  chat.update  editMessageText customer only    SSE push
 ```
 
 Bottom row rewrites the top row. Same Slack message, same Telegram message. Not new posts.
 
-**Four rules:**
+**Five rules:**
 
 1. **Nothing travels sideways.** No Slack-to-Telegram wire. Every surface talks only to the object. Any code sending a message from one platform to another is a bridge — delete it.
 2. **Normalizer flattens everything.** Slack button, Telegram callback, web submit all arrive different. They leave as one action, e.g. `{type: "acknowledge", by: "himanshu"}`. Nothing downstream cares which app it came from.
-3. **Subscription table is the actual invention.** `object_id` maps to a list of live views. Slack view = `channel + message_ts`. Telegram view = `chat_id + message_id`. Web view = open connection. Without it you are syncing. With it you are re-rendering.
-4. **Renderers are pure functions.** Object in, that platform's markup out. A renderer never knows what happened, only what the object currently is. Break this and surfaces drift.
+3. **Capability belongs to the window, not the person.** No login, no user table.
+   The customer's window renders no controls because its renderer cannot produce
+   them. Enforced again in `apply()` before anything reaches the store.
+4. **Subscription table is the actual invention.** `object_id` maps to a list of live views. Slack view = `channel + message_ts`. Telegram view = `chat_id + message_id`. Web view = open connection. Without it you are syncing. With it you are re-rendering.
+5. **Renderers are pure functions.** Object in, that platform's markup out. A renderer never knows what happened, only what the object currently is. Break this and surfaces drift.
 
 **Agent sits beside people, not above them.** It writes to the object same as a human tap. No separate code path for "agent did it."
 
@@ -136,7 +146,7 @@ Customer types a paragraph of frustration on WhatsApp. Agent fills the fields: w
 
 - Engineer on Telegram at 11pm: _"Payments timing out, 40 users hit. Roll back deploy 4a91? Yes / No."_
 - Lead in Slack: full card — timeline, who is on it, severity, proposed fix, approve button.
-- Customer on WhatsApp: _"We've found the cause and a fix is going out. We'll confirm within the hour."_
+- Customer in their own Telegram DM: _"We've found the cause and a fix is going out."_
 
 Same facts. Three audiences. Template cannot do it. Renderer cannot do it. Only a model can.
 
@@ -164,13 +174,38 @@ Say this out loud: the agent's job is translating one shared truth for readers w
 
 ---
 
+## 6b. Who can do what
+
+Capability comes from the window, not the person. No login, no user table.
+
+| Action           | Customer DM | Telegram group | Slack | Web |
+| ---------------- | ----------- | -------------- | ----- | --- |
+| intake (report)  | yes         | no             | yes   | yes |
+| acknowledge      | no          | yes            | yes   | yes |
+| propose fix      | no          | no             | yes   | yes |
+| approve / reject | no          | yes            | yes   | yes |
+| resolve          | no          | yes            | yes   | yes |
+| add note         | no          | no             | yes   | yes |
+
+Three rules behind the table:
+
+1. The customer can start an issue but never steer it. Their window renders no controls.
+2. The phone cannot type. No `propose`, no `note` from Telegram.
+3. Nobody approves their own proposal, on any surface.
+
+`reframe` is a system action written by the agent, allowed from anywhere — no
+window owns it.
+
+---
+
 ## 7. Platforms
 
-**Build 3 on the day:**
+**Four windows, three platforms:**
 
 1. **Slack** — the deep one. Block Kit, buttons, modal, updates in place. The surface the CopilotKit dev asked someone to push hard.
 2. **Telegram** — the cheap one. BotFather ~2 min. The "works on a phone" proof.
-3. **Web** — the full one. The original that Block Kit is a port of.
+3. **Telegram DM** — the customer's own thread. One sentence, no controls.
+4. **Web** — the full one. The original that Block Kit is a port of.
 
 **Skip and why:**
 
@@ -178,7 +213,9 @@ Say this out loud: the agent's job is translating one shared truth for readers w
 - **Teams** — sideloading needs tenant admin. Unreachable admin = lost hour, zero output.
 - **WhatsApp** — SDK supports it, but WhatsApp Business API needs Meta business account + number verification. Not same-day reliable. Never on the critical path.
 
-**Two surfaces = death.** Slack card + web dashboard IS incident.io. The phone surface is the proof, not a bonus.
+**Two surfaces = death.** Slack card + web dashboard IS incident.io. The phone
+surface is the proof, not a bonus, and the customer DM is what makes the agent's
+per-audience framing visible instead of theoretical.
 
 **Future scope (say out loud in video, cheap points):**
 
