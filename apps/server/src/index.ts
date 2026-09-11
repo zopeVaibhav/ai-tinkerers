@@ -4,9 +4,11 @@ import { Audience } from "@repo/types";
 import type { Action } from "@repo/types";
 import { ENABLED, ENV } from "./config/env";
 import { act } from "./actions";
-import { listConflicts, listDecisions, onChange } from "./repository";
+import { getConflict, listConflicts, listDecisions, onChange, persist } from "./repository";
 import { record } from "./decisions";
+import { detect } from "./detect";
 import { extract } from "./agent/extract";
+import { reframe } from "./agent";
 import type { Message } from "./agent/extract";
 import type { ThreadRef } from "./decisions";
 import { openStream, pushWeb } from "./adapters/web";
@@ -66,6 +68,24 @@ async function readThread(thread: ThreadRef, messages: Message[], lastSpeaker: s
     );
     await confirmDecision(result.decision);
     void pushWeb();
+
+    for (const conflict of await detect(result.decision)) void rewrite(conflict.id);
+}
+
+const rewriting = new Set<string>();
+
+/** Framings are the agent's wording of the clash, written once it is found. */
+async function rewrite(conflictId: string) {
+    if (!ENABLED.agent || rewriting.has(conflictId)) return;
+    rewriting.add(conflictId);
+    try {
+        const current = await getConflict(conflictId);
+        if (!current) return;
+        const action = await reframe(current);
+        if (action) await persist(current, action);
+    } finally {
+        rewriting.delete(conflictId);
+    }
 }
 
 /**

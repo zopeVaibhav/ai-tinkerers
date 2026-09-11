@@ -6,7 +6,8 @@
     "scripts": {
         "dev": "bun run --watch src/index.ts",
         "start": "bun run src/index.ts",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "check:detection": "bun run src/scripts/check-detection.ts"
     },
     "dependencies": {
         "@repo/core": "workspace:*",
