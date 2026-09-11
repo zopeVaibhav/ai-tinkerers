@@ -44,15 +44,17 @@ call logs and skips; the rest keeps working.
 ## Commands
 
 ```bash
-docker compose up -d   # Postgres on :5433
 bun install
 bun run generate       # prisma generate
-bun run db:push        # sync schema
+bun run db:push        # sync schema to the database in .env
 bun run dev            # web on :5100, server on :5101
 bun run db:studio      # prisma studio
 bun run typecheck
 bun run format
 ```
+
+`docker compose up -d` still brings up a local Postgres on :5433 if you want to
+work against a throwaway database instead of the shared one.
 
 ## Working as a team
 
@@ -63,6 +65,17 @@ same tokens will steal each other's events, whatever the database says.
 So each developer gets their own sandbox: their own Telegram bot from BotFather,
 their own group, and their own Slack channel. Same code, different `.env`. Keep
 one shared channel and bot for demos, used by one machine at a time.
+
+The database is the exception. Every developer points `DATABASE_URL` at the same
+hosted Postgres, so an issue raised on one machine is already there when another
+runs `bun run dev`. Ask a teammate for the URL and paste it into your own `.env`;
+it is not in the repository and must not be. One person runs `bun run db:push`
+after a schema change and tells the others to run `bun run generate`, because a
+push rewrites the shared schema for everyone.
+
+Migrations from a local `.env`: the Prisma CLI reads that same root `.env`
+through `packages/database/prisma.config.ts`, so `db:push` and `db:studio` hit
+whichever database you are pointing at. Check before you push.
 
 ## Setup
 

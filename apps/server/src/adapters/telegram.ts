@@ -1,5 +1,5 @@
 import { Bot } from "grammy";
-import { renderCustomer, renderTelegram } from "@repo/core";
+import { renderTelegram } from "@repo/core";
 import { ActionType, Audience, Surface } from "@repo/types";
 import type { Action, SharedObject } from "@repo/types";
 import { ENV } from "../config/env";
@@ -9,7 +9,7 @@ let bot: Bot | null = null;
 
 export async function startTelegram(
     act: (issueId: string, action: Action, from: Audience) => Promise<unknown>,
-    raise: (text: string, by: string, on: Surface, chatId?: number) => Promise<unknown>,
+    raise: (text: string, by: string, on: Surface) => Promise<unknown>,
 ) {
     const instance = new Bot(ENV.TELEGRAM_BOT_TOKEN);
 
@@ -24,18 +24,7 @@ export async function startTelegram(
         const by = ctx.from?.first_name ?? Surface.Telegram;
         const parsed = parse(ctx.callbackQuery.data, by);
         if (!parsed) return;
-        const from = ctx.chat?.type === "private" ? Audience.Customer : Audience.Engineer;
-        await act(parsed.issueId, parsed.action, from);
-    });
-
-    /**
-     * A private chat is a customer. Their message raises the issue, and the card
-     * we send back becomes their window onto it from then on.
-     */
-    instance.on("message:text", async (ctx) => {
-        if (ctx.chat.type !== "private") return;
-        const by = ctx.from?.first_name ?? Audience.Customer;
-        await raise(ctx.message.text, by, Surface.Telegram, ctx.chat.id);
+        await act(parsed.issueId, parsed.action, Audience.Engineer);
     });
 
     // Long polling. Never await this — it only settles when the bot stops.
@@ -61,30 +50,16 @@ export async function postIssue(issue: SharedObject) {
     console.log(`telegram card posted issue=${issue.id} message_id=${sent.message_id}`);
 }
 
-/** The reporter's own thread. One sentence, no controls. */
-export async function postCustomerIssue(issue: SharedObject, chatId: number) {
-    if (!bot) return;
-    const sent = await bot.api.sendMessage(chatId, renderCustomer(issue).text);
-    await addView(issue.id, {
-        surface: Surface.Telegram,
-        audience: Audience.Customer,
-        chatId,
-        messageId: sent.message_id,
-    });
-    console.log(`telegram customer view registered issue=${issue.id} chat=${chatId}`);
-}
-
 export async function updateTelegram(issue: SharedObject) {
     if (!bot) return;
     for (const view of await viewsOf(issue.id)) {
         if (view.surface !== Surface.Telegram) continue;
 
-        const customer = view.audience === Audience.Customer;
-        const payload = customer ? renderCustomer(issue) : renderTelegram(issue);
+        const payload = renderTelegram(issue);
 
         try {
             await bot.api.editMessageText(view.chatId, view.messageId, payload.text, {
-                reply_markup: customer ? { inline_keyboard: [] } : markup(payload, issue.id),
+                reply_markup: markup(payload, issue.id),
             });
         } catch (error) {
             const message = (error as Error).message ?? "";

@@ -9,12 +9,7 @@ import { createIssue, getIssue, listIssues, persist, publish } from "./repositor
 import { onChange } from "./repository";
 import { openStream, pushWeb } from "./adapters/web";
 import { postIssue as postSlack, startSlack, updateSlack } from "./adapters/slack";
-import {
-    postCustomerIssue,
-    postIssue as postTelegram,
-    startTelegram,
-    updateTelegram,
-} from "./adapters/telegram";
+import { postIssue as postTelegram, startTelegram, updateTelegram } from "./adapters/telegram";
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -53,12 +48,7 @@ app.post("/report", async (req, res) => {
  * A report creates a new issue and opens a window on every surface. Every other
  * action targets an issue that already exists.
  */
-async function raise(
-    text: string,
-    by: string,
-    on: Surface,
-    customerChatId?: number,
-): Promise<SharedObject | null> {
+async function raise(text: string, by: string, on: Surface): Promise<SharedObject | null> {
     if (!ENABLED.agent) return null;
 
     const action = await intake(text, by);
@@ -68,7 +58,6 @@ async function raise(
 
     if (ENABLED.slack) await postSlack(issue);
     if (ENABLED.telegram) await postTelegram(issue);
-    if (ENABLED.telegram && customerChatId) await postCustomerIssue(issue, customerChatId);
 
     publish(issue);
     void rewrite(issue.id);
