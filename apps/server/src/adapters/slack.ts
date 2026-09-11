@@ -3,7 +3,7 @@ import { renderSlack } from "@repo/core";
 import { ActionType, Audience, Side, Surface } from "@repo/types";
 import type { Action, Conflict, Decision } from "@repo/types";
 import { ENV } from "../config/env";
-import { dropView, viewsOf } from "../repository";
+import { addView, dropView, viewsOf } from "../repository";
 import { onThreadQuiet } from "../threads";
 import type { Message } from "../agent/extract";
 import type { ThreadRef } from "../decisions";
@@ -211,6 +211,45 @@ async function channelName(channel: string): Promise<string> {
         return name;
     } catch {
         return channel;
+    }
+}
+
+/**
+ * One conflict, two rooms, at the same moment. Each side gets the card inside
+ * the conversation where its own decision was made — not at channel level,
+ * where it would read as a bot announcement rather than the agent answering in
+ * a conversation it was part of.
+ */
+export async function postConflict(conflict: Conflict) {
+    if (!client) return;
+
+    for (const decision of [conflict.a, conflict.b]) {
+        const [channel, ts] = decision.threadKey.split(":");
+        if (!channel) continue;
+
+        try {
+            const posted = await client.chat.postMessage({
+                channel,
+                ...(ts ? { thread_ts: ts } : {}),
+                text: summary(conflict),
+                blocks: renderSlack(conflict) as never[],
+            });
+
+            if (!posted.ts) continue;
+            await addView(conflict.id, {
+                surface: Surface.Slack,
+                audience: Audience.Lead,
+                channel,
+                ts: posted.ts,
+                threadTs: ts ?? "",
+            });
+            console.log(`conflict card posted in ${decision.threadName} ts=${posted.ts}`);
+        } catch (error) {
+            console.error(
+                `could not post conflict in ${decision.threadName}:`,
+                (error as Error).message,
+            );
+        }
     }
 }
 

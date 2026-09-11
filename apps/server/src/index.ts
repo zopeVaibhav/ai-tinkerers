@@ -1,7 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { Audience } from "@repo/types";
-import type { Action } from "@repo/types";
+import type { Action, Conflict } from "@repo/types";
 import { ENABLED, ENV } from "./config/env";
 import { act } from "./actions";
 import { getConflict, listConflicts, listDecisions, onChange, persist } from "./repository";
@@ -12,8 +12,17 @@ import { reframe } from "./agent";
 import type { Message } from "./agent/extract";
 import type { ThreadRef } from "./decisions";
 import { openStream, pushWeb } from "./adapters/web";
-import { confirmDecision, startSlack, updateSlack } from "./adapters/slack";
-import { startTelegram, updateTelegram } from "./adapters/telegram";
+import {
+    confirmDecision,
+    postConflict as postConflictToSlack,
+    startSlack,
+    updateSlack,
+} from "./adapters/slack";
+import {
+    postConflict as postConflictToTelegram,
+    startTelegram,
+    updateTelegram,
+} from "./adapters/telegram";
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -69,7 +78,19 @@ async function readThread(thread: ThreadRef, messages: Message[], lastSpeaker: s
     await confirmDecision(result.decision);
     void pushWeb();
 
-    for (const conflict of await detect(result.decision)) void rewrite(conflict.id);
+    for (const conflict of await detect(result.decision)) await announce(conflict);
+}
+
+/**
+ * Open a window on the conflict everywhere it belongs, then let the agent write
+ * its wording. Every later change reaches those windows through the same
+ * fan-out as a button tap — there is no separate path for "the agent did it".
+ */
+async function announce(conflict: Conflict) {
+    if (ENABLED.slack) await postConflictToSlack(conflict);
+    if (ENABLED.telegram) await postConflictToTelegram(conflict);
+    void pushWeb();
+    void rewrite(conflict.id);
 }
 
 const rewriting = new Set<string>();
