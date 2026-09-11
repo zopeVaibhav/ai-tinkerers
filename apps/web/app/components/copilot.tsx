@@ -1,5 +1,7 @@
 "use client";
 
+// zod v3 on purpose: CopilotKit converts tool schemas with zod-to-json-schema,
+// which does not understand zod v4. The server stays on v4.
 import { z } from "zod";
 import { useAgentContext, useFrontendTool } from "@copilotkit/react-core/v2";
 import { ActionType } from "@repo/types";
