@@ -121,26 +121,36 @@ exports.Prisma.TransactionIsolationLevel = makeStrictEnum({
   Serializable: 'Serializable'
 });
 
-exports.Prisma.IssueScalarFieldEnum = {
+exports.Prisma.DecisionScalarFieldEnum = {
+  id: 'id',
+  createdAt: 'createdAt',
+  surface: 'surface',
+  threadKey: 'threadKey',
+  threadName: 'threadName',
+  decidedBy: 'decidedBy',
+  rawText: 'rawText',
+  subsystem: 'subsystem',
+  condition: 'condition',
+  action: 'action',
+  supersededById: 'supersededById'
+};
+
+exports.Prisma.ConflictScalarFieldEnum = {
   id: 'id',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
   version: 'version',
-  raisedBy: 'raisedBy',
-  raisedOn: 'raisedOn',
-  what: 'what',
-  severity: 'severity',
-  affected: 'affected',
-  acknowledgedBy: 'acknowledgedBy',
-  proposedFix: 'proposedFix',
-  approvedBy: 'approvedBy',
+  decisionAId: 'decisionAId',
+  decisionBId: 'decisionBId',
   status: 'status',
+  acknowledgedBy: 'acknowledgedBy',
+  resolution: 'resolution',
   framings: 'framings'
 };
 
 exports.Prisma.EventScalarFieldEnum = {
   id: 'id',
-  issueId: 'issueId',
+  conflictId: 'conflictId',
   at: 'at',
   by: 'by',
   what: 'what'
@@ -148,11 +158,12 @@ exports.Prisma.EventScalarFieldEnum = {
 
 exports.Prisma.ViewScalarFieldEnum = {
   id: 'id',
-  issueId: 'issueId',
+  conflictId: 'conflictId',
   surface: 'surface',
   audience: 'audience',
   channel: 'channel',
   ts: 'ts',
+  threadTs: 'threadTs',
   chatId: 'chatId',
   messageId: 'messageId'
 };
@@ -171,15 +182,15 @@ exports.Prisma.QueryMode = {
   insensitive: 'insensitive'
 };
 
+exports.Prisma.NullsOrder = {
+  first: 'first',
+  last: 'last'
+};
+
 exports.Prisma.JsonNullValueFilter = {
   DbNull: Prisma.DbNull,
   JsonNull: Prisma.JsonNull,
   AnyNull: Prisma.AnyNull
-};
-
-exports.Prisma.NullsOrder = {
-  first: 'first',
-  last: 'last'
 };
 exports.Surface = exports.$Enums.Surface = {
   slack: 'slack',
@@ -187,27 +198,40 @@ exports.Surface = exports.$Enums.Surface = {
   web: 'web'
 };
 
-exports.Severity = exports.$Enums.Severity = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high'
+exports.Subsystem = exports.$Enums.Subsystem = {
+  payments: 'payments',
+  auth: 'auth',
+  notifications: 'notifications'
 };
 
-exports.Status = exports.$Enums.Status = {
-  triage: 'triage',
-  awaiting_approval: 'awaiting_approval',
-  approved: 'approved',
+exports.Condition = exports.$Enums.Condition = {
+  gateway_timeout: 'gateway_timeout',
+  rate_limited: 'rate_limited',
+  token_expired: 'token_expired',
+  duplicate_event: 'duplicate_event'
+};
+
+exports.ClaimAction = exports.$Enums.ClaimAction = {
+  hard_fail: 'hard_fail',
+  retry_silently: 'retry_silently',
+  queue_and_warn: 'queue_and_warn',
+  log_only: 'log_only'
+};
+
+exports.ConflictStatus = exports.$Enums.ConflictStatus = {
+  open: 'open',
+  acknowledged: 'acknowledged',
   resolved: 'resolved'
 };
 
 exports.Audience = exports.$Enums.Audience = {
   engineer: 'engineer',
-  lead: 'lead',
-  customer: 'customer'
+  lead: 'lead'
 };
 
 exports.Prisma.ModelName = {
-  Issue: 'Issue',
+  Decision: 'Decision',
+  Conflict: 'Conflict',
   Event: 'Event',
   View: 'View'
 };

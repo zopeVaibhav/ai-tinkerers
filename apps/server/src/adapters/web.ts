@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { listIssues } from "../repository";
+import { listConflicts } from "../repository";
 
 const connections = new Set<Response>();
 
@@ -15,16 +15,16 @@ export async function openStream(req: Request, res: Response) {
     });
 
     connections.add(res);
-    res.write(`data: ${JSON.stringify(await listIssues())}\n\n`);
+    res.write(`data: ${JSON.stringify(await listConflicts())}\n\n`);
 
     req.on("close", () => {
         connections.delete(res);
     });
 }
 
-/** Every web view sees the whole list, so any change reaches every tab. */
+/** Every web view sees the whole registry, so any change reaches every tab. */
 export async function pushWeb() {
     if (!connections.size) return;
-    const payload = `data: ${JSON.stringify(await listIssues())}\n\n`;
+    const payload = `data: ${JSON.stringify(await listConflicts())}\n\n`;
     for (const res of connections) res.write(payload);
 }

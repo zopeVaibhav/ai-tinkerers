@@ -93,26 +93,36 @@ exports.Prisma.TransactionIsolationLevel = makeStrictEnum({
   Serializable: 'Serializable'
 });
 
-exports.Prisma.IssueScalarFieldEnum = {
+exports.Prisma.DecisionScalarFieldEnum = {
+  id: 'id',
+  createdAt: 'createdAt',
+  surface: 'surface',
+  threadKey: 'threadKey',
+  threadName: 'threadName',
+  decidedBy: 'decidedBy',
+  rawText: 'rawText',
+  subsystem: 'subsystem',
+  condition: 'condition',
+  action: 'action',
+  supersededById: 'supersededById'
+};
+
+exports.Prisma.ConflictScalarFieldEnum = {
   id: 'id',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
   version: 'version',
-  raisedBy: 'raisedBy',
-  raisedOn: 'raisedOn',
-  what: 'what',
-  severity: 'severity',
-  affected: 'affected',
-  acknowledgedBy: 'acknowledgedBy',
-  proposedFix: 'proposedFix',
-  approvedBy: 'approvedBy',
+  decisionAId: 'decisionAId',
+  decisionBId: 'decisionBId',
   status: 'status',
+  acknowledgedBy: 'acknowledgedBy',
+  resolution: 'resolution',
   framings: 'framings'
 };
 
 exports.Prisma.EventScalarFieldEnum = {
   id: 'id',
-  issueId: 'issueId',
+  conflictId: 'conflictId',
   at: 'at',
   by: 'by',
   what: 'what'
@@ -120,11 +130,12 @@ exports.Prisma.EventScalarFieldEnum = {
 
 exports.Prisma.ViewScalarFieldEnum = {
   id: 'id',
-  issueId: 'issueId',
+  conflictId: 'conflictId',
   surface: 'surface',
   audience: 'audience',
   channel: 'channel',
   ts: 'ts',
+  threadTs: 'threadTs',
   chatId: 'chatId',
   messageId: 'messageId'
 };
@@ -143,29 +154,16 @@ exports.Prisma.QueryMode = {
   insensitive: 'insensitive'
 };
 
+exports.Prisma.NullsOrder = {
+  first: 'first',
+  last: 'last'
+};
+
 exports.Prisma.JsonNullValueFilter = {
   DbNull: Prisma.DbNull,
   JsonNull: Prisma.JsonNull,
   AnyNull: Prisma.AnyNull
 };
-
-exports.Prisma.NullsOrder = {
-  first: 'first',
-  last: 'last'
-};
-exports.Severity = exports.$Enums.Severity = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high'
-};
-
-exports.Status = exports.$Enums.Status = {
-  triage: 'triage',
-  awaiting_approval: 'awaiting_approval',
-  approved: 'approved',
-  resolved: 'resolved'
-};
-
 exports.Surface = exports.$Enums.Surface = {
   slack: 'slack',
   telegram: 'telegram',
@@ -174,12 +172,38 @@ exports.Surface = exports.$Enums.Surface = {
 
 exports.Audience = exports.$Enums.Audience = {
   engineer: 'engineer',
-  lead: 'lead',
-  customer: 'customer'
+  lead: 'lead'
+};
+
+exports.Subsystem = exports.$Enums.Subsystem = {
+  payments: 'payments',
+  auth: 'auth',
+  notifications: 'notifications'
+};
+
+exports.Condition = exports.$Enums.Condition = {
+  gateway_timeout: 'gateway_timeout',
+  rate_limited: 'rate_limited',
+  token_expired: 'token_expired',
+  duplicate_event: 'duplicate_event'
+};
+
+exports.ClaimAction = exports.$Enums.ClaimAction = {
+  hard_fail: 'hard_fail',
+  retry_silently: 'retry_silently',
+  queue_and_warn: 'queue_and_warn',
+  log_only: 'log_only'
+};
+
+exports.ConflictStatus = exports.$Enums.ConflictStatus = {
+  open: 'open',
+  acknowledged: 'acknowledged',
+  resolved: 'resolved'
 };
 
 exports.Prisma.ModelName = {
-  Issue: 'Issue',
+  Decision: 'Decision',
+  Conflict: 'Conflict',
   Event: 'Event',
   View: 'View'
 };
@@ -221,6 +245,7 @@ const config = {
     "db"
   ],
   "activeProvider": "postgresql",
+  "postinstall": false,
   "inlineDatasources": {
     "db": {
       "url": {
@@ -229,13 +254,13 @@ const config = {
       }
     }
   },
-  "inlineSchema": "generator client {\n  provider = \"prisma-client-js\"\n  output   = \"../generated/client\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nenum Severity {\n  low\n  medium\n  high\n}\n\nenum Status {\n  triage\n  awaiting_approval\n  approved\n  resolved\n}\n\nenum Surface {\n  slack\n  telegram\n  web\n}\n\nenum Audience {\n  engineer\n  lead\n  customer\n}\n\n/// One shared object. Every surface renders this and nothing else.\nmodel Issue {\n  id        String   @id @default(cuid())\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n  version   Int      @default(0)\n\n  raisedBy String\n  raisedOn Surface\n\n  what           String\n  severity       Severity @default(low)\n  affected       Int      @default(0)\n  acknowledgedBy String?\n  proposedFix    String?\n  approvedBy     String?\n  status         Status   @default(triage)\n\n  /// The agent's wording of the same facts, keyed by audience.\n  framings Json @default(\"{}\")\n\n  timeline Event[]\n  views    View[]\n\n  @@index([status, createdAt])\n}\n\n/// Append-only. One row per applied action.\nmodel Event {\n  id      String   @id @default(cuid())\n  issueId String\n  issue   Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)\n  at      DateTime @default(now())\n  by      String\n  what    String\n\n  @@index([issueId, at])\n}\n\n/// A live window onto one issue. Web connections are not persisted; they die\n/// with the browser tab. Only message-backed views survive a restart.\nmodel View {\n  id       String   @id @default(cuid())\n  issueId  String\n  issue    Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)\n  surface  Surface\n  audience Audience\n\n  channel   String?\n  ts        String?\n  chatId    BigInt?\n  messageId Int?\n\n  @@unique([issueId, surface, audience, chatId])\n  @@index([issueId])\n}\n",
-  "inlineSchemaHash": "e9797d440265e68014fea7b9183d07b3005ca1c1bfa8e8074d27da96f03b40d1",
+  "inlineSchema": "generator client {\n  provider = \"prisma-client-js\"\n  output   = \"../generated/client\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nenum Surface {\n  slack\n  telegram\n  web\n}\n\nenum Audience {\n  engineer\n  lead\n}\n\n/// Closed vocabularies on purpose. The model picks a value, it never invents\n/// one, so conflict detection stays an equality check instead of fuzzy matching.\nenum Subsystem {\n  payments\n  auth\n  notifications\n}\n\nenum Condition {\n  gateway_timeout\n  rate_limited\n  token_expired\n  duplicate_event\n}\n\nenum ClaimAction {\n  hard_fail\n  retry_silently\n  queue_and_warn\n  log_only\n}\n\nenum ConflictStatus {\n  open\n  acknowledged\n  resolved\n}\n\n/// What one thread concluded, as a structured claim.\nmodel Decision {\n  id        String   @id @default(cuid())\n  createdAt DateTime @default(now())\n\n  surface    Surface\n  threadKey  String\n  threadName String\n  decidedBy  String\n  rawText    String\n\n  subsystem Subsystem\n  condition Condition\n  action    ClaimAction\n\n  /// Superseded decisions are invisible to conflict detection.\n  supersededById String? @unique\n\n  conflictsAsA Conflict[] @relation(\"decisionA\")\n  conflictsAsB Conflict[] @relation(\"decisionB\")\n\n  @@index([subsystem, condition])\n  @@index([threadKey])\n}\n\n/// Two decisions that cannot both be true. This is the shared object: it renders\n/// in both threads at once and updates in place on every surface.\nmodel Conflict {\n  id        String   @id @default(cuid())\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n  version   Int      @default(0)\n\n  decisionAId String\n  decisionA   Decision @relation(\"decisionA\", fields: [decisionAId], references: [id], onDelete: Cascade)\n  decisionBId String\n  decisionB   Decision @relation(\"decisionB\", fields: [decisionBId], references: [id], onDelete: Cascade)\n\n  status         ConflictStatus @default(open)\n  acknowledgedBy String?\n  resolution     String?\n\n  /// The agent's wording of the same conflict, keyed by audience.\n  framings Json @default(\"{}\")\n\n  timeline Event[]\n  views    View[]\n\n  @@unique([decisionAId, decisionBId])\n  @@index([status, createdAt])\n}\n\n/// Append-only. One row per applied action.\nmodel Event {\n  id         String   @id @default(cuid())\n  conflictId String\n  conflict   Conflict @relation(fields: [conflictId], references: [id], onDelete: Cascade)\n  at         DateTime @default(now())\n  by         String\n  what       String\n\n  @@index([conflictId, at])\n}\n\n/// The subscription table. One conflict maps to every live window onto it.\n/// Web connections are not persisted; they die with the browser tab.\nmodel View {\n  id         String   @id @default(cuid())\n  conflictId String\n  conflict   Conflict @relation(fields: [conflictId], references: [id], onDelete: Cascade)\n  surface    Surface\n  audience   Audience\n\n  channel   String?\n  ts        String?\n  threadTs  String?\n  chatId    BigInt?\n  messageId Int?\n\n  @@index([conflictId])\n}\n",
+  "inlineSchemaHash": "4abd409686e0730e8c3a2e4fcf50295cf7a75402e8a1562211c38ac5176801b0",
   "copyEngine": true
 }
 config.dirname = '/'
 
-config.runtimeDataModel = JSON.parse("{\"models\":{\"Issue\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"version\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"raisedBy\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"raisedOn\",\"kind\":\"enum\",\"type\":\"Surface\"},{\"name\":\"what\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"severity\",\"kind\":\"enum\",\"type\":\"Severity\"},{\"name\":\"affected\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"acknowledgedBy\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"proposedFix\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"approvedBy\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"status\",\"kind\":\"enum\",\"type\":\"Status\"},{\"name\":\"framings\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"timeline\",\"kind\":\"object\",\"type\":\"Event\",\"relationName\":\"EventToIssue\"},{\"name\":\"views\",\"kind\":\"object\",\"type\":\"View\",\"relationName\":\"IssueToView\"}],\"dbName\":null},\"Event\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"issueId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"issue\",\"kind\":\"object\",\"type\":\"Issue\",\"relationName\":\"EventToIssue\"},{\"name\":\"at\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"by\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"what\",\"kind\":\"scalar\",\"type\":\"String\"}],\"dbName\":null},\"View\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"issueId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"issue\",\"kind\":\"object\",\"type\":\"Issue\",\"relationName\":\"IssueToView\"},{\"name\":\"surface\",\"kind\":\"enum\",\"type\":\"Surface\"},{\"name\":\"audience\",\"kind\":\"enum\",\"type\":\"Audience\"},{\"name\":\"channel\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"ts\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"chatId\",\"kind\":\"scalar\",\"type\":\"BigInt\"},{\"name\":\"messageId\",\"kind\":\"scalar\",\"type\":\"Int\"}],\"dbName\":null}},\"enums\":{},\"types\":{}}")
+config.runtimeDataModel = JSON.parse("{\"models\":{\"Decision\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"surface\",\"kind\":\"enum\",\"type\":\"Surface\"},{\"name\":\"threadKey\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"threadName\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"decidedBy\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"rawText\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"subsystem\",\"kind\":\"enum\",\"type\":\"Subsystem\"},{\"name\":\"condition\",\"kind\":\"enum\",\"type\":\"Condition\"},{\"name\":\"action\",\"kind\":\"enum\",\"type\":\"ClaimAction\"},{\"name\":\"supersededById\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"conflictsAsA\",\"kind\":\"object\",\"type\":\"Conflict\",\"relationName\":\"decisionA\"},{\"name\":\"conflictsAsB\",\"kind\":\"object\",\"type\":\"Conflict\",\"relationName\":\"decisionB\"}],\"dbName\":null},\"Conflict\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"version\",\"kind\":\"scalar\",\"type\":\"Int\"},{\"name\":\"decisionAId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"decisionA\",\"kind\":\"object\",\"type\":\"Decision\",\"relationName\":\"decisionA\"},{\"name\":\"decisionBId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"decisionB\",\"kind\":\"object\",\"type\":\"Decision\",\"relationName\":\"decisionB\"},{\"name\":\"status\",\"kind\":\"enum\",\"type\":\"ConflictStatus\"},{\"name\":\"acknowledgedBy\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"resolution\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"framings\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"timeline\",\"kind\":\"object\",\"type\":\"Event\",\"relationName\":\"ConflictToEvent\"},{\"name\":\"views\",\"kind\":\"object\",\"type\":\"View\",\"relationName\":\"ConflictToView\"}],\"dbName\":null},\"Event\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"conflictId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"conflict\",\"kind\":\"object\",\"type\":\"Conflict\",\"relationName\":\"ConflictToEvent\"},{\"name\":\"at\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"by\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"what\",\"kind\":\"scalar\",\"type\":\"String\"}],\"dbName\":null},\"View\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"conflictId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"conflict\",\"kind\":\"object\",\"type\":\"Conflict\",\"relationName\":\"ConflictToView\"},{\"name\":\"surface\",\"kind\":\"enum\",\"type\":\"Surface\"},{\"name\":\"audience\",\"kind\":\"enum\",\"type\":\"Audience\"},{\"name\":\"channel\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"ts\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"threadTs\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"chatId\",\"kind\":\"scalar\",\"type\":\"BigInt\"},{\"name\":\"messageId\",\"kind\":\"scalar\",\"type\":\"Int\"}],\"dbName\":null}},\"enums\":{},\"types\":{}}")
 defineDmmfProperty(exports.Prisma, config.runtimeDataModel)
 config.engineWasm = {
   getRuntime: async () => require('./query_engine_bg.js'),

@@ -1,9 +1,17 @@
 import { reduce } from "@repo/core";
 import { prisma } from "@repo/database";
-import { ActionType, Audience, Severity, Status, Surface } from "@repo/types";
-import type { Action, SharedObject, ViewRef } from "@repo/types";
+import { Audience, ConflictStatus, Surface } from "@repo/types";
+import type {
+    Action,
+    ClaimAction,
+    Condition,
+    Conflict,
+    Decision,
+    Subsystem,
+    ViewRef,
+} from "@repo/types";
 
-type Listener = (issue: SharedObject) => void;
+type Listener = (conflict: Conflict) => void;
 
 const listeners = new Set<Listener>();
 
@@ -12,145 +20,197 @@ export function onChange(listener: Listener): () => void {
     return () => listeners.delete(listener);
 }
 
-function announce(issue: SharedObject) {
-    for (const listener of listeners) listener(issue);
+function announce(conflict: Conflict) {
+    for (const listener of listeners) listener(conflict);
 }
 
-const INCLUDE = { timeline: { orderBy: { at: "asc" } } } as const;
+const INCLUDE = {
+    decisionA: true,
+    decisionB: true,
+    timeline: { orderBy: { at: "asc" } },
+} as const;
 
-export async function createIssue(
-    action: Extract<Action, { type: ActionType.Intake }>,
-    raisedOn: Surface,
-): Promise<SharedObject> {
-    const row = await prisma.issue.create({
-        data: {
-            raisedBy: action.by,
-            raisedOn,
-            what: action.what,
-            severity: action.severity,
-            affected: action.affected,
-            status: Status.Triage,
-            version: 1,
-            timeline: { create: { by: action.by, what: `reported: ${action.what}` } },
+export type NewDecision = {
+    surface: Surface;
+    threadKey: string;
+    threadName: string;
+    decidedBy: string;
+    rawText: string;
+    subsystem: Subsystem;
+    condition: Condition;
+    action: ClaimAction;
+};
+
+export async function createDecision(input: NewDecision): Promise<Decision> {
+    const row = await prisma.decision.create({ data: input });
+    return toDecision(row);
+}
+
+/** Superseded decisions are invisible here, which is what stops a resolved
+ *  conflict reappearing forever. */
+export async function candidatesFor(
+    subsystem: Subsystem,
+    condition: Condition,
+): Promise<Decision[]> {
+    const rows = await prisma.decision.findMany({
+        where: { subsystem, condition, supersededById: null },
+        orderBy: { createdAt: "desc" },
+    });
+    return rows.map(toDecision);
+}
+
+export async function listDecisions(): Promise<Decision[]> {
+    const rows = await prisma.decision.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
+    return rows.map(toDecision);
+}
+
+export async function createConflict(a: Decision, b: Decision): Promise<Conflict | null> {
+    const existing = await prisma.conflict.findFirst({
+        where: {
+            OR: [
+                { decisionAId: a.id, decisionBId: b.id },
+                { decisionAId: b.id, decisionBId: a.id },
+            ],
         },
+    });
+    if (existing) return null;
+
+    const row = await prisma.conflict.create({
+        data: { decisionAId: a.id, decisionBId: b.id, version: 1, status: ConflictStatus.Open },
         include: INCLUDE,
     });
-    return toDomain(row);
+
+    const conflict = toConflict(row);
+    announce(conflict);
+    return conflict;
 }
 
-export async function getIssue(id: string): Promise<SharedObject | null> {
-    const row = await prisma.issue.findUnique({ where: { id }, include: INCLUDE });
-    return row ? toDomain(row) : null;
+export async function getConflict(id: string): Promise<Conflict | null> {
+    const row = await prisma.conflict.findUnique({ where: { id }, include: INCLUDE });
+    return row ? toConflict(row) : null;
 }
 
-export async function listIssues(): Promise<SharedObject[]> {
-    const rows = await prisma.issue.findMany({
+export async function listConflicts(): Promise<Conflict[]> {
+    const rows = await prisma.conflict.findMany({
         include: INCLUDE,
         orderBy: { createdAt: "desc" },
         take: 50,
     });
-    return rows.map(toDomain);
+    return rows.map(toConflict);
 }
 
 /**
  * Persist the result of the pure reducer. The reducer decides what the next
- * object is; this only writes it down and tells everyone.
+ * conflict is; this only writes it down and tells everyone.
  */
-export async function persist(current: SharedObject, action: Action): Promise<SharedObject> {
+export async function persist(current: Conflict, action: Action): Promise<Conflict> {
     const next = reduce(current, action);
     const entry = next.timeline[next.timeline.length - 1];
 
-    const row = await prisma.issue.update({
+    const row = await prisma.conflict.update({
         where: { id: current.id },
         data: {
             version: next.version,
-            what: next.facts.what,
-            severity: next.facts.severity,
-            affected: next.facts.affected,
-            acknowledgedBy: next.facts.acknowledgedBy,
-            proposedFix: next.facts.proposedFix,
-            approvedBy: next.facts.approvedBy,
-            status: next.facts.status,
+            status: next.status,
+            acknowledgedBy: next.acknowledgedBy,
+            resolution: next.resolution,
             framings: next.framings,
             ...(entry ? { timeline: { create: { by: entry.by, what: entry.what } } } : {}),
         },
         include: INCLUDE,
     });
 
-    const issue = toDomain(row);
-    announce(issue);
-    return issue;
+    const conflict = toConflict(row);
+    announce(conflict);
+    return conflict;
 }
 
-export function publish(issue: SharedObject) {
-    announce(issue);
-}
-
-export async function addView(issueId: string, view: ViewRef): Promise<void> {
+export async function addView(conflictId: string, view: ViewRef): Promise<void> {
     if (view.surface === Surface.Web) return;
     await prisma.view.create({
         data: {
-            issueId,
+            conflictId,
             surface: view.surface,
             audience: view.audience,
             channel: view.surface === Surface.Slack ? view.channel : null,
             ts: view.surface === Surface.Slack ? view.ts : null,
+            threadTs: view.surface === Surface.Slack ? view.threadTs : null,
             chatId: view.surface === Surface.Telegram ? BigInt(view.chatId) : null,
             messageId: view.surface === Surface.Telegram ? view.messageId : null,
         },
     });
 }
 
-export async function viewsOf(issueId: string): Promise<ViewRef[]> {
-    const rows = await prisma.view.findMany({ where: { issueId } });
+export async function viewsOf(conflictId: string): Promise<ViewRef[]> {
+    const rows = await prisma.view.findMany({ where: { conflictId } });
     return rows.map(toView);
 }
 
-export async function dropView(issueId: string, view: ViewRef): Promise<void> {
+export async function dropView(conflictId: string, view: ViewRef): Promise<void> {
     if (view.surface === Surface.Slack) {
-        await prisma.view.deleteMany({ where: { issueId, surface: Surface.Slack, ts: view.ts } });
+        await prisma.view.deleteMany({
+            where: { conflictId, surface: Surface.Slack, ts: view.ts },
+        });
     }
     if (view.surface === Surface.Telegram) {
         await prisma.view.deleteMany({
-            where: { issueId, surface: Surface.Telegram, messageId: view.messageId },
+            where: { conflictId, surface: Surface.Telegram, messageId: view.messageId },
         });
     }
 }
 
-type Row = {
+type DecisionRow = {
+    id: string;
+    createdAt: Date;
+    surface: string;
+    threadKey: string;
+    threadName: string;
+    decidedBy: string;
+    rawText: string;
+    subsystem: string;
+    condition: string;
+    action: string;
+    supersededById: string | null;
+};
+
+function toDecision(row: DecisionRow): Decision {
+    return {
+        id: row.id,
+        createdAt: row.createdAt.toISOString(),
+        surface: row.surface as Surface,
+        threadKey: row.threadKey,
+        threadName: row.threadName,
+        decidedBy: row.decidedBy,
+        rawText: row.rawText,
+        subsystem: row.subsystem as Subsystem,
+        condition: row.condition as Condition,
+        action: row.action as ClaimAction,
+        supersededById: row.supersededById,
+    };
+}
+
+function toConflict(row: {
     id: string;
     createdAt: Date;
     version: number;
-    raisedBy: string;
-    raisedOn: string;
-    what: string;
-    severity: string;
-    affected: number;
-    acknowledgedBy: string | null;
-    proposedFix: string | null;
-    approvedBy: string | null;
     status: string;
+    acknowledgedBy: string | null;
+    resolution: string | null;
     framings: unknown;
+    decisionA: DecisionRow;
+    decisionB: DecisionRow;
     timeline: { at: Date; by: string; what: string }[];
-};
-
-function toDomain(row: Row): SharedObject {
+}): Conflict {
     return {
         id: row.id,
         version: row.version,
         createdAt: row.createdAt.toISOString(),
-        raisedBy: row.raisedBy,
-        raisedOn: row.raisedOn as Surface,
-        facts: {
-            what: row.what,
-            severity: row.severity as Severity,
-            affected: row.affected,
-            acknowledgedBy: row.acknowledgedBy,
-            proposedFix: row.proposedFix,
-            approvedBy: row.approvedBy,
-            status: row.status as Status,
-        },
-        framings: (row.framings ?? {}) as SharedObject["framings"],
+        status: row.status as ConflictStatus,
+        acknowledgedBy: row.acknowledgedBy,
+        resolution: row.resolution,
+        a: toDecision(row.decisionA),
+        b: toDecision(row.decisionB),
+        framings: (row.framings ?? {}) as Conflict["framings"],
         timeline: row.timeline.map((entry) => ({
             at: entry.at.toISOString(),
             by: entry.by,
@@ -164,6 +224,7 @@ function toView(row: {
     audience: string;
     channel: string | null;
     ts: string | null;
+    threadTs: string | null;
     chatId: bigint | null;
     messageId: number | null;
 }): ViewRef {
@@ -173,6 +234,7 @@ function toView(row: {
             audience: row.audience as Audience,
             channel: row.channel ?? "",
             ts: row.ts ?? "",
+            threadTs: row.threadTs ?? "",
         };
     }
     return {

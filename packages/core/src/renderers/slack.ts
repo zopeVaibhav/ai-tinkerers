@@ -1,106 +1,99 @@
-import { ActionType, Audience, Status } from "@repo/types";
-import type { SharedObject } from "@repo/types";
+import { ActionType, Audience, ConflictStatus } from "@repo/types";
+import type { Conflict, Decision } from "@repo/types";
 
 /**
- * Pure function: object in, Block Kit out. Knows nothing about what happened,
- * only what the object currently is. Never import a Slack client here.
- *
- * Slack is the widest surface, so it gets the whole object: situation, fix,
- * timeline and every action available in the current status.
+ * Pure function: conflict in, Block Kit out. Knows nothing about what happened,
+ * only what the conflict currently is. Never import a Slack client here.
  *
  * Note: input blocks are rejected by chat.postMessage ("unsupported type: input").
  * Anything needing typed input must be a button that opens a modal.
  */
-export function renderSlack(object: SharedObject): unknown[] {
-    const { facts, framings, timeline } = object;
+export function renderSlack(conflict: Conflict): unknown[] {
+    const { a, b, framings, status, timeline } = conflict;
 
     const blocks: unknown[] = [
         {
             type: "header",
-            text: { type: "plain_text", text: "Customer escalation" },
+            text: { type: "plain_text", text: "Contradicting decisions" },
         },
         {
             type: "section",
-            text: { type: "mrkdwn", text: framings[Audience.Lead] ?? facts.what },
+            text: {
+                type: "mrkdwn",
+                text: framings[Audience.Lead] ?? headline(conflict),
+            },
         },
         {
             type: "section",
-            fields: [
-                { type: "mrkdwn", text: `*Severity*\n${facts.severity.toUpperCase()}` },
-                { type: "mrkdwn", text: `*Users affected*\n${facts.affected}` },
-                { type: "mrkdwn", text: `*Status*\n${STATUS_LABEL[facts.status]}` },
-                { type: "mrkdwn", text: `*Owner*\n${facts.acknowledgedBy ?? "unassigned"}` },
-                { type: "mrkdwn", text: `*Raised by*\n${object.raisedBy}` },
+            fields: [side(a), side(b)],
+        },
+        {
+            type: "context",
+            elements: [
+                {
+                    type: "mrkdwn",
+                    text: `*Status* ${STATUS_LABEL[status]}${
+                        conflict.acknowledgedBy ? ` · seen by ${conflict.acknowledgedBy}` : ""
+                    }${conflict.resolution ? ` · ${conflict.resolution}` : ""}`,
+                },
             ],
         },
     ];
 
-    if (facts.proposedFix) {
-        blocks.push({
-            type: "section",
-            text: {
-                type: "mrkdwn",
-                text: `*Proposed fix*\n${facts.proposedFix}${
-                    facts.approvedBy ? `\n_approved by ${facts.approvedBy}_` : ""
-                }`,
-            },
-        });
-    }
-
-    const buttons = actionsFor(object);
+    const buttons = actionsFor(conflict);
     if (buttons.length) blocks.push({ type: "actions", elements: buttons });
 
     blocks.push({ type: "divider" });
-    blocks.push({
-        type: "context",
-        elements: [{ type: "mrkdwn", text: recent(timeline) }],
-    });
+    blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: recent(timeline) }] });
 
     return blocks;
 }
 
-const STATUS_LABEL: Record<Status, string> = {
-    [Status.Triage]: "Triage",
-    [Status.AwaitingApproval]: "Waiting for approval",
-    [Status.Approved]: "Approved",
-    [Status.Resolved]: "Resolved",
+const STATUS_LABEL: Record<ConflictStatus, string> = {
+    [ConflictStatus.Open]: "Open",
+    [ConflictStatus.Acknowledged]: "Acknowledged",
+    [ConflictStatus.Resolved]: "Resolved",
 };
 
-function actionsFor(object: SharedObject): unknown[] {
-    const { status, acknowledgedBy } = object.facts;
-    const id = object.id;
+export function headline(conflict: Conflict): string {
+    return `Two threads decided different things about *${conflict.a.subsystem}* on \`${conflict.a.condition}\`.`;
+}
+
+function side(decision: Decision) {
+    return {
+        type: "mrkdwn",
+        text: `*${decision.threadName}*\n\`${decision.action}\`\n_${decision.decidedBy}_`,
+    };
+}
+
+function actionsFor(conflict: Conflict): unknown[] {
+    const id = conflict.id;
     const buttons: unknown[] = [];
 
-    if (status === Status.Triage) {
-        if (!acknowledgedBy) buttons.push(button(ActionType.Acknowledge, "Take it", id, "primary"));
-        buttons.push(button(ActionType.Propose, "Propose fix", id));
+    if (conflict.status === ConflictStatus.Open) {
+        buttons.push(button(ActionType.Acknowledge, "Acknowledge", id, "primary"));
     }
 
-    if (status === Status.AwaitingApproval) {
-        buttons.push(button(ActionType.Approve, "Approve", id, "primary"));
-        buttons.push(button(ActionType.Reject, "Reject", id, "danger"));
+    if (conflict.status !== ConflictStatus.Resolved) {
+        buttons.push(button(ActionType.Supersede, "Keep one", id));
+        buttons.push(button(ActionType.Note, "Add note", id));
     }
-
-    if (status === Status.Approved)
-        buttons.push(button(ActionType.Resolve, "Resolve", id, "primary"));
-
-    if (status !== Status.Resolved) buttons.push(button(ActionType.Note, "Add note", id));
 
     return buttons;
 }
 
-function button(actionId: ActionType, text: string, issueId: string, style?: "primary" | "danger") {
+function button(actionId: ActionType, text: string, conflictId: string, style?: "primary") {
     return {
         type: "button",
         action_id: actionId,
-        value: issueId,
+        value: conflictId,
         text: { type: "plain_text", text },
         ...(style ? { style } : {}),
     };
 }
 
-function recent(timeline: SharedObject["timeline"]): string {
-    if (!timeline.length) return "_no activity yet_";
+function recent(timeline: Conflict["timeline"]): string {
+    if (!timeline.length) return "_nobody has looked at this yet_";
     return timeline
         .slice(-3)
         .map((entry) => `${entry.by} ${entry.what}`)

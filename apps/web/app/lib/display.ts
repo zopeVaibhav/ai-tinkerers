@@ -1,37 +1,22 @@
-import { Severity, Status, Surface } from "@repo/types";
-import type { SharedObject } from "@repo/types";
+import { ConflictStatus, Surface } from "@repo/types";
+import type { Conflict } from "@repo/types";
 
-export const STATUS_ORDER: Status[] = [
-    Status.Triage,
-    Status.AwaitingApproval,
-    Status.Approved,
-    Status.Resolved,
+export const STATUS_ORDER: ConflictStatus[] = [
+    ConflictStatus.Open,
+    ConflictStatus.Acknowledged,
+    ConflictStatus.Resolved,
 ];
 
-export const STATUS_LABEL: Record<Status, string> = {
-    [Status.Triage]: "Triage",
-    [Status.AwaitingApproval]: "Waiting",
-    [Status.Approved]: "Approved",
-    [Status.Resolved]: "Resolved",
+export const STATUS_LABEL: Record<ConflictStatus, string> = {
+    [ConflictStatus.Open]: "Open",
+    [ConflictStatus.Acknowledged]: "Seen",
+    [ConflictStatus.Resolved]: "Resolved",
 };
 
-export const STATUS_STYLE: Record<Status, string> = {
-    [Status.Triage]: "bg-neutral-200 text-neutral-800",
-    [Status.AwaitingApproval]: "bg-amber-100 text-amber-900",
-    [Status.Approved]: "bg-sky-100 text-sky-900",
-    [Status.Resolved]: "bg-emerald-100 text-emerald-900",
-};
-
-export const SEVERITY_DOT: Record<Severity, string> = {
-    [Severity.Low]: "bg-neutral-300",
-    [Severity.Medium]: "bg-amber-400",
-    [Severity.High]: "bg-red-500",
-};
-
-export const SEVERITY_TEXT: Record<Severity, string> = {
-    [Severity.Low]: "text-neutral-500",
-    [Severity.Medium]: "text-amber-700",
-    [Severity.High]: "text-red-700",
+export const STATUS_STYLE: Record<ConflictStatus, string> = {
+    [ConflictStatus.Open]: "bg-red-100 text-red-900",
+    [ConflictStatus.Acknowledged]: "bg-amber-100 text-amber-900",
+    [ConflictStatus.Resolved]: "bg-emerald-100 text-emerald-900",
 };
 
 export const SURFACE_LABEL: Record<Surface, string> = {
@@ -61,15 +46,19 @@ export function fullTime(iso: string): string {
 
 /**
  * One text field to search over. The list is small, so a substring match over
- * everything a person might remember about an issue beats a field picker.
+ * everything a person might remember about a clash beats a field picker.
  */
-export function haystack(issue: SharedObject): string {
+export function haystack(conflict: Conflict): string {
     return [
-        issue.facts.what,
-        issue.raisedBy,
-        issue.raisedOn,
-        issue.facts.acknowledgedBy ?? "",
-        issue.facts.proposedFix ?? "",
+        conflict.a.subsystem,
+        conflict.a.condition,
+        conflict.a.threadName,
+        conflict.b.threadName,
+        conflict.a.action,
+        conflict.b.action,
+        conflict.a.decidedBy,
+        conflict.b.decidedBy,
+        conflict.resolution ?? "",
     ]
         .join(" ")
         .toLowerCase();

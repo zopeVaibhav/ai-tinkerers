@@ -7,12 +7,17 @@ and `ref/RUNBOOK.md` for how to run and test it.
 ## Layout
 
 ```
-apps/web          Next.js 16 — issue list and detail canvas
+apps/web          Next.js 16 — registry list and conflict detail
 apps/server       Bun + Express 5 — repository, fan-out, adapters, agent
 packages/core     pure: reducer, guard, permissions, renderers (no IO, no model calls)
 packages/database Prisma schema and client (Postgres)
 packages/types    shared enums and contracts
 ```
+
+The product is a **contradiction registry**: every thread gets an agent, it
+writes what the thread decided into a shared registry, and when two threads
+decide opposite things about the same subsystem both threads get told. Read
+`ref/PLAN.md` before changing anything.
 
 ## Surfaces
 
@@ -48,6 +53,7 @@ bun install
 bun run generate       # prisma generate
 bun run db:push        # sync schema to the database in .env
 bun run dev            # web on :5100, server on :5101
+bun run db:seed        # dev fixture: one fabricated conflict
 bun run db:studio      # prisma studio
 bun run typecheck
 bun run format
@@ -78,6 +84,9 @@ through `packages/database/prisma.config.ts`, so `db:push` and `db:studio` hit
 whichever database you are pointing at. Check before you push.
 
 ## Setup
+
+`DATABASE_URL` may point at the local Docker Postgres or at a hosted one — check
+which before running anything destructive.
 
 Copy `.env.example` to `.env` and fill it in. Each surface stays disabled until
 its credentials are present, so the server boots either way — check
