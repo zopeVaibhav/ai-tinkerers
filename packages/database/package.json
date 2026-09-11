@@ -12,7 +12,8 @@
         "db:migrate": "bun --env-file=../../.env x prisma migrate dev",
         "db:seed": "bun --env-file=../../.env run src/seed.ts",
         "studio": "bun --env-file=../../.env x prisma studio",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "db:clear": "bun --env-file=../../.env run src/clear.ts"
     },
     "dependencies": {
         "@prisma/client": "^6.19.0",

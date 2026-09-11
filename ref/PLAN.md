@@ -148,6 +148,44 @@ Three layers, in increasing risk:
    has to land in both rooms. If it cannot, the raw Slack client does it in five
    lines and we keep our adapters for that one call.
 
+### Spike result — 2026-09-12, `@copilotkit/channels@0.9.2`
+
+Answered from the published package types, not from blog posts.
+
+**Can a thread-agent read its conversation and update what it posted? Yes.**
+`Thread` exposes `post(ui)`, `update(ref, ui)`, `delete(ref)`, `stream()`,
+`postFile()`, `setTitle()`, plus `onMessage`, `onMention`, `onReaction`,
+`onModalSubmit`, `onInteraction`, `onInterrupt` and `onCommand` on the channel.
+`update(ref, ui)` is exactly the in-place rewrite this project runs on. That was
+the risk flagged when the idea was still a tracker, and it is not a risk.
+
+**Can a thread-agent post into a different thread? No.**
+`Channel` has no `openThread`, `getThread` or anything keyed by
+`conversationKey`. A `Thread` only ever arrives as an argument to a handler, and
+`ReplyTarget` is documented as "opaque to the channel core — created by an
+adapter during ingress". There is no way to construct one for a room that has
+not just spoken.
+
+That is fatal for us specifically. The whole product is that a decision in
+`#mobile` causes a card to appear in `#payments`, a room nobody messaged. The SDK
+is built for reply-to-what-arrived; we need speak-into-a-room-unprompted.
+
+**Third finding, larger than either: Channels requires CopilotKit Intelligence.**
+The documented path is a Channel created in the Intelligence console, a Channel
+Code and a project API key, with Slack credentials held by CopilotKit rather than
+by us. Platform ingress is delivered to a long-running process. That is account
+provisioning we do not have and a different ownership model for the Slack app.
+
+**Decision: keep the hand-rolled Slack and Telegram adapters.**
+CopilotKit stays in the project through the web surface — runtime, provider,
+`useAgentContext`, `useFrontendTool` — which is a real integration rather than an
+imitation of one. Porting the channel surfaces would cost the cross-thread post,
+which is the product.
+
+Say this plainly if asked, rather than letting it look like we did not know the
+SDK existed: one agent per thread matches Channels exactly, and we would have used
+it, but a conflict has to reach a room that did not ask.
+
 Known trap: the API is `createChannel`, **not** `createBot`. The old name was
 deleted with no alias, and every blog post and tutorial online still shows it.
 

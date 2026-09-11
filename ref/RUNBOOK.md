@@ -35,6 +35,12 @@ curl -s http://localhost:5101/health
 Expect `{"ok":true,"surfaces":{"slack":true,"telegram":true,"agent":true}}`.
 Any `false` means that surface's credentials are missing from `.env`.
 
+## What this is
+
+Every conversation thread gets its own agent. It records what its room decided,
+and when two rooms decide opposite things about the same subsystem, both rooms
+get told. Read `ref/PLAN.md` first.
+
 ## Three ways to raise an issue
 
 | Where       | How                                                 |
@@ -119,6 +125,33 @@ Each developer needs:
 
 The shared channel and group are for demos only, run from one machine.
 
+## Checking it without Slack
+
+```bash
+bun run db:clear
+bun run --filter server check:detection
+```
+
+Twelve assertions covering the whole lifecycle: a lone decision clashes with
+nothing, a second room disagrees and produces exactly one conflict, re-running
+detection makes no duplicate, acknowledging moves it out of open, a phone cannot
+leave a note, superseding resolves it and marks the losing claim superseded, a
+settled clash is never found again, and a second clash on another subsystem
+stands on its own.
+
+If any line says FAIL, stop and read it before touching Slack.
+
+## The four states every surface must render
+
+Check all of these before filming. `bun run db:clear` between each.
+
+1. **Nothing recorded** — empty registry, both tabs
+2. **One decision, no clash** — the Recorded decisions tab has a row, no cards anywhere
+3. **Conflict open** — a card in both Slack rooms, one in the Telegram group, the
+   Contradictions tab filled, Acknowledge available
+4. **Conflict resolved** — every card shows the resolution and who made it, no
+   buttons, and the losing decision greyed out as superseded
+
 ## Useful commands
 
 ```bash
@@ -136,8 +169,14 @@ curl -X POST http://localhost:5101/report -H 'Content-Type: application/json' \
 curl -X POST http://localhost:5101/issues/<id>/action -H 'Content-Type: application/json' \
   -d '{"type":"acknowledge","by":"vaibhav"}'
 
-# wipe everything and start clean
-docker compose down -v && docker compose up -d && bun run db:push
+# wipe everything and start clean between takes
+bun run db:clear
+
+# seed the state before a clash — one room has decided, nobody has disagreed
+bun run db:seed
+
+# full lifecycle check, no Slack needed
+bun run --filter server check:detection
 
 # checks that must pass before pushing
 bun run typecheck
@@ -146,7 +185,19 @@ bun run format
 
 ## Action types
 
-`intake` · `acknowledge` · `propose` · `approve` · `reject` · `resolve` · `note` · `reframe`
+`acknowledge` · `resolve` · `supersede` · `note` · `reframe`
 
-Each needs `by`. `intake` also needs `what`, `severity`, `affected`.
-`propose` needs `fix`. `reject` needs `reason`. `note` needs `text`.
+Each needs `by`. `resolve` needs `resolution`, `supersede` needs `winner` (`a` or
+`b`) and `note`, `note` needs `text`. `reframe` is written by the agent and no
+window owns it.
+
+Who may do what:
+
+|                           | acknowledge | resolve | supersede | note |
+| ------------------------- | ----------- | ------- | --------- | ---- |
+| Slack and web (lead)      | yes         | yes     | yes       | yes  |
+| Telegram group (engineer) | yes         | no      | no        | no   |
+
+The phone cannot type, so it cannot supersede or leave a note. Both the renderer
+and the server enforce that — a refused action prints `refused ... not allowed on
+that surface`.

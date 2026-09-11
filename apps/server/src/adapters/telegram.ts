@@ -3,7 +3,7 @@ import { renderTelegram } from "@repo/core";
 import { ActionType, Audience, Surface } from "@repo/types";
 import type { Action, Conflict } from "@repo/types";
 import { ENV } from "../config/env";
-import { dropView, viewsOf } from "../repository";
+import { addView, dropView, viewsOf } from "../repository";
 
 let bot: Bot | null = null;
 
@@ -29,6 +29,28 @@ export async function startTelegram(
     void instance.start({ drop_pending_updates: true });
     bot = instance;
     console.log("telegram connected");
+}
+
+/** The phone surface. One message per conflict, in the team group. */
+export async function postConflict(conflict: Conflict) {
+    if (!bot) return;
+    const chatId = Number(ENV.TELEGRAM_CHAT_ID);
+    const payload = renderTelegram(conflict);
+
+    try {
+        const sent = await bot.api.sendMessage(chatId, payload.text, {
+            reply_markup: markup(payload, conflict.id),
+        });
+        await addView(conflict.id, {
+            surface: Surface.Telegram,
+            audience: Audience.Engineer,
+            chatId,
+            messageId: sent.message_id,
+        });
+        console.log(`conflict card posted to telegram message_id=${sent.message_id}`);
+    } catch (error) {
+        console.error("could not post conflict to telegram:", (error as Error).message);
+    }
 }
 
 export async function updateTelegram(conflict: Conflict) {
