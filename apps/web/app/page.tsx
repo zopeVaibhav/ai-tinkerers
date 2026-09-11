@@ -6,6 +6,8 @@ import type { Action, Conflict, Decision } from "@repo/types";
 import { ConflictList, StatusFilter } from "./components/conflict-list";
 import { ConflictDetail } from "./components/conflict-detail";
 import { DecisionList } from "./components/decision-list";
+import { RegistryCopilot } from "./components/copilot";
+import { CopilotSidebar } from "@copilotkit/react-core/v2";
 import { STATUS_ORDER, haystack } from "./lib/display";
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:5101";
@@ -67,17 +69,28 @@ export default function Page() {
         localStorage.setItem("name", value);
     }
 
-    async function act(action: Draft<Action>) {
-        if (!conflict) return;
-        await fetch(`${SERVER}/conflicts/${conflict.id}/action`, {
+    /** One write path for the panel, the buttons and the agent alike. */
+    async function send(conflictId: string, action: Record<string, unknown>) {
+        await fetch(`${SERVER}/conflicts/${conflictId}/action`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ...action, by: name || "web" }),
         });
     }
 
+    async function act(action: Draft<Action>) {
+        if (!conflict) return;
+        await send(conflict.id, action as unknown as Record<string, unknown>);
+    }
+
     return (
         <main className="mx-auto flex max-w-6xl flex-col gap-6 p-8">
+            <RegistryCopilot
+                conflicts={conflicts}
+                decisions={decisions}
+                onAct={(conflictId, action) => send(conflictId, action)}
+            />
+            <CopilotSidebar />
             <header className="flex flex-wrap items-baseline justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-medium">Contradiction registry</h1>
