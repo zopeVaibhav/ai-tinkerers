@@ -181,17 +181,19 @@ and run from a single machine.
 
 ## 9. Order of work
 
-Issues are numbered to be picked in order. Each states what it depends on.
+Pick them in this order. Each issue restates the scenario it enables, names what
+it must not do, and is written to be picked up by a session that has read only
+this file.
 
-| #   | Issue                                           | Depends on |
-| --- | ----------------------------------------------- | ---------- |
-| 5   | Decision and Conflict domain model              | —          |
-| 6   | Thread agent: extract a decision from a thread  | 5          |
-| 7   | Registry and deterministic conflict detection   | 5, 6       |
-| 8   | The conflict as a shared object in both threads | 7          |
-| 9   | CopilotKit on the web surface                   | 8          |
-| 10  | Channels SDK and AG-UI spike, then integrate    | 8          |
-| 11  | Resolution flow and demo hardening              | 8          |
+| Order | Issue                                                                                                       | Depends on           |
+| ----- | ----------------------------------------------------------------------------------------------------------- | -------------------- |
+| 1     | [#4](https://github.com/zopeVaibhav/ai-tinkerers/issues/4) Decision and Conflict domain model               | —                    |
+| 2     | [#5](https://github.com/zopeVaibhav/ai-tinkerers/issues/5) Thread agent: extract a decision from a thread   | #4                   |
+| 3     | [#6](https://github.com/zopeVaibhav/ai-tinkerers/issues/6) Registry and deterministic conflict detection    | #4, #5               |
+| 4     | [#7](https://github.com/zopeVaibhav/ai-tinkerers/issues/7) The conflict as a shared object in both threads  | #6                   |
+| 5     | [#8](https://github.com/zopeVaibhav/ai-tinkerers/issues/8) CopilotKit on the web surface                    | #7                   |
+| 6     | [#9](https://github.com/zopeVaibhav/ai-tinkerers/issues/9) Channels SDK and AG-UI: spike, decide, integrate | #7, parallel with #8 |
+| 7     | [#10](https://github.com/zopeVaibhav/ai-tinkerers/issues/10) Resolution flow and demo hardening             | #7                   |
 
 Issue #1 (intake from every surface, customer DM, permissions) is superseded by
 this plan and closed.
