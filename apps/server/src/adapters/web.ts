@@ -1,42 +1,35 @@
 import type { Request, Response } from "express";
-import { renderWeb } from "@repo/core";
-import { Audience, Surface } from "@repo/types";
-import type { SharedObject } from "@repo/types";
-import { subscribe, unsubscribe } from "../subscriptions";
+import { listConflicts, listDecisions } from "../repository";
 
-type Connection = { id: string; res: Response; objectId: string };
-
-const connections = new Map<string, Connection>();
+const connections = new Set<Response>();
 
 /**
  * SSE, not WebSocket. Fan-out is one-directional server to client, which is
  * exactly what SSE is. Actions travel back up as plain POST.
  */
-export function openStream(req: Request, res: Response, objectId: string, initial: SharedObject) {
-    const id = crypto.randomUUID();
-
+export async function openStream(req: Request, res: Response) {
     res.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
     });
 
-    connections.set(id, { id, res, objectId });
-    subscribe(objectId, { surface: Surface.Web, audience: Audience.Lead, connectionId: id });
-    write(res, initial);
+    connections.add(res);
+    res.write(`data: ${JSON.stringify(await snapshot())}\n\n`);
 
     req.on("close", () => {
-        connections.delete(id);
-        unsubscribe(objectId, (view) => view.surface === Surface.Web && view.connectionId === id);
+        connections.delete(res);
     });
 }
 
-export function pushWeb(object: SharedObject): void {
-    for (const connection of connections.values()) {
-        if (connection.objectId === object.id) write(connection.res, object);
-    }
+/** Every web view sees the whole registry, so any change reaches every tab. */
+export async function pushWeb() {
+    if (!connections.size) return;
+    const payload = `data: ${JSON.stringify(await snapshot())}\n\n`;
+    for (const res of connections) res.write(payload);
 }
 
-function write(res: Response, object: SharedObject): void {
-    res.write(`data: ${JSON.stringify(renderWeb(object))}\n\n`);
+async function snapshot() {
+    const [conflicts, decisions] = await Promise.all([listConflicts(), listDecisions()]);
+    return { conflicts, decisions };
 }

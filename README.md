@@ -7,11 +7,17 @@ and `ref/RUNBOOK.md` for how to run and test it.
 ## Layout
 
 ```
-apps/web        Next.js 16 — the canvas surface
-apps/server     Bun + Express 5 — store, subscription table, fan-out, adapters, agent
-packages/core   pure: object, reducer, guard, permissions, renderers (no IO, no model calls)
-packages/types  shared enums and contracts
+apps/web          Next.js 16 — registry list and conflict detail
+apps/server       Bun + Express 5 — repository, fan-out, adapters, agent
+packages/core     pure: reducer, guard, permissions, renderers (no IO, no model calls)
+packages/database Prisma schema and client (Postgres)
+packages/types    shared enums and contracts
 ```
+
+The product is a **contradiction registry**: every thread gets an agent, it
+writes what the thread decided into a shared registry, and when two threads
+decide opposite things about the same subsystem both threads get told. Read
+`ref/PLAN.md` before changing anything.
 
 ## Surfaces
 
@@ -44,16 +50,52 @@ call logs and skips; the rest keeps working.
 
 ```bash
 bun install
-bun run dev          # turbo: web on :5100, server on :5101
+bun run generate       # prisma generate
+bun run db:push        # sync schema to the database in .env
+bun run dev            # web on :5100, server on :5101
+bun run db:seed        # dev fixture: one fabricated conflict
+bun run db:studio      # prisma studio
 bun run typecheck
 bun run format
 ```
 
+`docker compose up -d` still brings up a local Postgres on :5433 if you want to
+work against a throwaway database instead of the shared one.
+
+## Working as a team
+
+Telegram allows exactly one poller per bot token, and Slack delivers each Socket
+Mode event to exactly one connection. Two people running the server against the
+same tokens will steal each other's events, whatever the database says.
+
+So each developer gets their own sandbox: their own Telegram bot from BotFather,
+their own group, and their own Slack channel. Same code, different `.env`. Keep
+one shared channel and bot for demos, used by one machine at a time.
+
+The database is the exception. Every developer points `DATABASE_URL` at the same
+hosted Postgres, so an issue raised on one machine is already there when another
+runs `bun run dev`. Ask a teammate for the URL and paste it into your own `.env`;
+it is not in the repository and must not be. One person runs `bun run db:push`
+after a schema change and tells the others to run `bun run generate`, because a
+push rewrites the shared schema for everyone.
+
+Migrations from a local `.env`: the Prisma CLI reads that same root `.env`
+through `packages/database/prisma.config.ts`, so `db:push` and `db:studio` hit
+whichever database you are pointing at. Check before you push.
+
 ## Setup
+
+`DATABASE_URL` may point at the local Docker Postgres or at a hosted one — check
+which before running anything destructive.
 
 Copy `.env.example` to `.env` and fill it in. Each surface stays disabled until
 its credentials are present, so the server boots either way — check
 `GET /health` to see which are live.
 
-Slack needs bot scopes `chat:write` and `app_mentions:read`, Socket Mode on,
-Interactivity on, and the bot event `app_mention` subscribed.
+Slack needs:
+
+- bot scopes `chat:write`, `app_mentions:read`, `channels:history`, `channels:read`
+- Socket Mode on, Interactivity on
+- bot events subscribed: `app_mention` and `message.channels`
+
+The bot only reads threads in channels it has been invited to.

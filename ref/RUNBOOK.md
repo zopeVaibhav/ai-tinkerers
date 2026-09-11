@@ -6,6 +6,8 @@ How to run and test this yourself. No help needed.
 
 ```bash
 cd /Users/vaibhav_zope/utility/ai-tinkers
+docker compose up -d     # Postgres on :5433, first time only
+bun run db:push          # after any schema change
 bun run dev
 ```
 
@@ -91,27 +93,51 @@ terminal (`telegram chat seen: id=...`), and put it in `.env` as
 - `refused approve from <name>: cannot approve own proposal` — get someone else
   to sign off
 
-**Mentioning the bot in Slack does nothing.** Scopes are not enough. The app also
-needs the bot event `app_mention` subscribed under Event Subscriptions.
+**The agent ignores everything in a channel.** Two causes. Either the app is
+missing `channels:history` / `channels:read`, or the bot event `message.channels`
+is not subscribed under Event Subscriptions. Scopes alone are not enough.
+
+**The agent read the thread and recorded nothing.** That is the normal case. It
+only records when someone states what the system should do and the claim fits the
+closed vocabularies in `packages/types/src/enums.ts`. Still discussing means no
+decision.
 
 **Piles of old cards.** Every card from before the last `.state.json` reset is
 dead. Delete them; only the newest is registered.
 
+## Your own sandbox
+
+Two people cannot share a bot. Telegram allows one poller per token; Slack sends
+each event to one socket connection. Whoever connected last wins, at random.
+
+Each developer needs:
+
+1. Their own bot — `/newbot` in BotFather, own token
+2. Their own Telegram group with that bot in it
+3. Their own Slack channel, with the app invited
+4. Their own `.env` holding those values
+
+The shared channel and group are for demos only, run from one machine.
+
 ## Useful commands
 
 ```bash
-# what the object currently holds
-python3 -c "import json;print(json.dumps(json.load(open('.state.json'))['objects']['demo'],indent=2))"
+# every issue and its status
+curl -s http://localhost:5101/issues | python3 -m json.tool
 
-# start over
-curl -X POST http://localhost:5101/reset
+# browse the database
+bun run db:studio
 
-# force brand new cards on every surface
-rm .state.json    # then restart
+# raise an issue from the terminal
+curl -X POST http://localhost:5101/report -H 'Content-Type: application/json' \
+  -d '{"text":"checkout hangs then errors","from":"vaibhav"}'
 
-# drive it from the terminal instead of clicking
-curl -X POST http://localhost:5101/action -H 'Content-Type: application/json' \
+# act on one
+curl -X POST http://localhost:5101/issues/<id>/action -H 'Content-Type: application/json' \
   -d '{"type":"acknowledge","by":"vaibhav"}'
+
+# wipe everything and start clean
+docker compose down -v && docker compose up -d && bun run db:push
 
 # checks that must pass before pushing
 bun run typecheck

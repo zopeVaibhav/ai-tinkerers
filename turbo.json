@@ -3,19 +3,23 @@
     "ui": "tui",
     "globalEnv": [
         "NODE_ENV",
+        "DATABASE_URL",
         "SLACK_BOT_TOKEN",
         "SLACK_APP_TOKEN",
         "SLACK_CHANNEL_ID",
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_CHAT_ID",
-        "OPENROUTER_API_KEY",
+        "LLM_API_KEY",
+        "LLM_BASE_URL",
+        "LLM_MODEL",
         "WEB_PORT",
         "SERVER_PORT",
         "NEXT_PUBLIC_SERVER_URL"
     ],
     "tasks": {
+        "generate": { "cache": false },
         "build": {
-            "dependsOn": ["^build"],
+            "dependsOn": ["^build", "^generate"],
             "inputs": ["$TURBO_DEFAULT$", ".env*"],
             "outputs": [".next/**", "!.next/cache/**"]
         },

@@ -1,0 +1,21 @@
+services:
+    postgres:
+        image: postgres:16-alpine
+        container_name: shared-object-postgres
+        restart: unless-stopped
+        ports:
+            - "5433:5432"
+        environment:
+            POSTGRES_USER: shared
+            POSTGRES_PASSWORD: shared
+            POSTGRES_DB: shared_object
+        volumes:
+            - postgres-data:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U shared -d shared_object"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+
+volumes:
+    postgres-data:

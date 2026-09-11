@@ -1,0 +1,130 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Surface {
+  slack
+  telegram
+  web
+}
+
+enum Audience {
+  engineer
+  lead
+}
+
+/// Closed vocabularies on purpose. The model picks a value, it never invents
+/// one, so conflict detection stays an equality check instead of fuzzy matching.
+enum Subsystem {
+  payments
+  auth
+  notifications
+}
+
+enum Condition {
+  gateway_timeout
+  rate_limited
+  token_expired
+  duplicate_event
+}
+
+enum ClaimAction {
+  hard_fail
+  retry_silently
+  queue_and_warn
+  log_only
+}
+
+enum ConflictStatus {
+  open
+  acknowledged
+  resolved
+}
+
+/// What one thread concluded, as a structured claim.
+model Decision {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  surface    Surface
+  threadKey  String
+  threadName String
+  decidedBy  String
+  rawText    String
+
+  subsystem Subsystem
+  condition Condition
+  action    ClaimAction
+
+  /// Superseded decisions are invisible to conflict detection.
+  supersededById String? @unique
+
+  conflictsAsA Conflict[] @relation("decisionA")
+  conflictsAsB Conflict[] @relation("decisionB")
+
+  @@index([subsystem, condition])
+  @@index([threadKey])
+}
+
+/// Two decisions that cannot both be true. This is the shared object: it renders
+/// in both threads at once and updates in place on every surface.
+model Conflict {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version   Int      @default(0)
+
+  decisionAId String
+  decisionA   Decision @relation("decisionA", fields: [decisionAId], references: [id], onDelete: Cascade)
+  decisionBId String
+  decisionB   Decision @relation("decisionB", fields: [decisionBId], references: [id], onDelete: Cascade)
+
+  status         ConflictStatus @default(open)
+  acknowledgedBy String?
+  resolution     String?
+
+  /// The agent's wording of the same conflict, keyed by audience.
+  framings Json @default("{}")
+
+  timeline Event[]
+  views    View[]
+
+  @@unique([decisionAId, decisionBId])
+  @@index([status, createdAt])
+}
+
+/// Append-only. One row per applied action.
+model Event {
+  id         String   @id @default(cuid())
+  conflictId String
+  conflict   Conflict @relation(fields: [conflictId], references: [id], onDelete: Cascade)
+  at         DateTime @default(now())
+  by         String
+  what       String
+
+  @@index([conflictId, at])
+}
+
+/// The subscription table. One conflict maps to every live window onto it.
+/// Web connections are not persisted; they die with the browser tab.
+model View {
+  id         String   @id @default(cuid())
+  conflictId String
+  conflict   Conflict @relation(fields: [conflictId], references: [id], onDelete: Cascade)
+  surface    Surface
+  audience   Audience
+
+  channel   String?
+  ts        String?
+  threadTs  String?
+  chatId    BigInt?
+  messageId Int?
+
+  @@index([conflictId])
+}

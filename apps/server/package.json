@@ -6,7 +6,8 @@
     "scripts": {
         "dev": "bun run --watch src/index.ts",
         "start": "bun run src/index.ts",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "check:detection": "bun run src/scripts/check-detection.ts"
     },
     "dependencies": {
         "@repo/core": "workspace:*",
@@ -17,7 +18,8 @@
         "express": "^5.2.1",
         "grammy": "^1.31.0",
         "openai": "^7.15.0",
-        "zod": "^4.4.3"
+        "zod": "^4.4.3",
+        "@repo/database": "workspace:*"
     },
     "devDependencies": {
         "@types/bun": "latest",

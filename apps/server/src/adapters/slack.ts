@@ -1,9 +1,12 @@
 import { App, LogLevel } from "@slack/bolt";
 import { renderSlack } from "@repo/core";
-import { ActionType, Audience, Surface } from "@repo/types";
-import type { Action, SharedObject } from "@repo/types";
+import { ActionType, Audience, Side, Surface } from "@repo/types";
+import type { Action, Conflict, Decision } from "@repo/types";
 import { ENV } from "../config/env";
-import { subscribe, unsubscribe, viewsOf } from "../subscriptions";
+import { dropView, viewsOf } from "../repository";
+import { onThreadQuiet } from "../threads";
+import type { Message } from "../agent/extract";
+import type { ThreadRef } from "../decisions";
 
 type SlackClient = InstanceType<typeof App>["client"];
 
@@ -13,38 +16,53 @@ type ActionArgs = {
     client: SlackClient;
 };
 
-type MentionArgs = {
-    event: { text: string; user?: string };
-};
-
 type ViewArgs = {
     ack: () => Promise<void>;
     body: { user?: { username?: string; name?: string } };
-    view: { state: { values: Record<string, Record<string, { value?: string | null }>> } };
+    view: {
+        private_metadata: string;
+        state: { values: Record<string, Record<string, { value?: string | null }>> };
+    };
+};
+
+type MessageArgs = {
+    event: {
+        channel: string;
+        ts: string;
+        thread_ts?: string;
+        user?: string;
+        text?: string;
+        bot_id?: string;
+        subtype?: string;
+    };
 };
 
 let client: SlackClient | null = null;
 
-/** Buttons that change state directly, with nothing to type. */
-const DIRECT = [ActionType.Acknowledge, ActionType.Approve, ActionType.Resolve] as const;
+const channelNames = new Map<string, string>();
+const userNames = new Map<string, string>();
+
+const DIRECT = [ActionType.Acknowledge] as const;
 
 /**
- * Buttons that need typed input. Slack rejects input blocks in posted messages,
- * so the only way to collect text is button -> views.open -> view_submission.
+ * Slack rejects input blocks in posted messages, so the only way to collect
+ * text is button -> views.open -> view_submission. The issue id rides along in
+ * private_metadata so the submission knows which card it came from.
  */
 const PROMPTS = {
-    [ActionType.Propose]: { title: "Propose a fix", submit: "Propose", label: "What is the fix?" },
-    [ActionType.Reject]: { title: "Reject the fix", submit: "Reject", label: "Why?" },
+    [ActionType.Supersede]: {
+        title: "Keep one decision",
+        submit: "Keep",
+        label: "Which side wins, and why?",
+    },
     [ActionType.Note]: { title: "Add a note", submit: "Add", label: "Note" },
 } as const;
 
 type PromptKey = keyof typeof PROMPTS;
 
 export async function startSlack(
-    objectId: string,
-    initial: SharedObject,
-    dispatch: (action: Action, from: Audience) => void,
-    onReport: (text: string, by: string) => Promise<Action | null>,
+    act: (conflictId: string, action: Action, from: Audience) => Promise<unknown>,
+    onThread: (thread: ThreadRef, messages: Message[], lastSpeaker: string) => Promise<void>,
 ) {
     const app = new App({
         token: ENV.SLACK_BOT_TOKEN,
@@ -56,88 +74,161 @@ export async function startSlack(
     for (const type of DIRECT) {
         app.action(type, async (args: ActionArgs) => {
             await args.ack();
-            dispatch({ type, by: who(args.body) }, Audience.Lead);
+            const id = conflictOf(args);
+            if (id) await act(id, { type, by: who(args.body) }, Audience.Lead);
         });
     }
 
     for (const key of Object.keys(PROMPTS) as PromptKey[]) {
         app.action(key, async (args: ActionArgs) => {
             await args.ack();
-            if (!args.body.trigger_id) return;
+            const id = conflictOf(args);
+            if (!args.body.trigger_id || !id) return;
             await args.client.views.open({
                 trigger_id: args.body.trigger_id,
-                view: modal(key) as never,
+                view: modal(key, id) as never,
             });
         });
 
         app.view(`${key}_modal`, async (args: ViewArgs) => {
             await args.ack();
             const value = args.view.state.values.field?.value?.value?.trim();
-            if (!value) return;
-            dispatch(toAction(key, who(args.body), value), Audience.Lead);
+            const id = args.view.private_metadata;
+            if (!value || !id) return;
+            await act(id, toAction(key, who(args.body), value), Audience.Lead);
         });
     }
 
-    app.event("app_mention", async (args: MentionArgs) => {
-        const text = args.event.text.replace(/<@[^>]+>/g, "").trim();
-        if (!text) return;
-        const action = await onReport(text, args.event.user ?? Surface.Slack);
-        if (action) dispatch(action, Audience.Lead);
+    /**
+     * Every message in a channel the bot is in belongs to some thread. The
+     * agent for that thread re-reads it once the typing stops, which is the
+     * only way a decision gets recorded — nobody fills in a form.
+     */
+    app.event("message", async (args: MessageArgs) => {
+        const event = args.event;
+        console.log(
+            `slack message seen: channel=${event.channel} thread=${event.thread_ts ?? "-"} subtype=${event.subtype ?? "-"} bot=${event.bot_id ?? "-"}`,
+        );
+        if (event.bot_id || (event.subtype && event.subtype !== "thread_broadcast")) return;
+        if (!event.text?.trim()) return;
+
+        // A thread is one conversation. So is a channel where nobody threads —
+        // which is how most teams actually talk. Keying a bare message by its
+        // own ts would make every sentence its own conversation of one.
+        const rootTs = event.thread_ts;
+        const threadKey = rootTs ? `${event.channel}:${rootTs}` : event.channel;
+
+        onThreadQuiet(threadKey, async () => {
+            const messages = await readThread(event.channel, rootTs);
+            console.log(`thread agent reading ${threadKey}: ${messages.length} message(s)`);
+            if (messages.length === 0) return;
+            const thread: ThreadRef = {
+                surface: Surface.Slack,
+                threadKey,
+                threadName: await channelName(event.channel),
+            };
+            const last = messages[messages.length - 1];
+            await onThread(thread, messages, await personName(last?.by));
+        });
     });
 
     await app.start();
     client = app.client;
+    console.log("slack connected");
+}
 
-    // Reattach to a view we already own rather than posting a second card.
-    const existing = viewsOf(objectId).find((view) => view.surface === Surface.Slack);
-    if (existing && existing.surface === Surface.Slack) {
-        try {
-            await app.client.chat.update({
-                channel: existing.channel,
-                ts: existing.ts,
-                text: summary(initial),
-                blocks: renderSlack(initial) as never[],
-            });
-            console.log(`slack view reattached ts=${existing.ts}`);
-            return;
-        } catch {
-            unsubscribe(objectId, (view) => view.surface === Surface.Slack);
-        }
-    }
+/** Small and quiet. The loud moment belongs to the conflict card. */
+export async function confirmDecision(decision: Decision) {
+    if (!client) return;
+    const [channel, ts] = decision.threadKey.split(":");
+    if (!channel) return;
 
-    const posted = await app.client.chat.postMessage({
-        channel: ENV.SLACK_CHANNEL_ID,
-        text: summary(initial),
-        blocks: renderSlack(initial) as never[],
+    await client.chat.postMessage({
+        channel,
+        ...(ts ? { thread_ts: ts } : {}),
+        text: `Recorded: ${decision.subsystem} · on ${decision.condition} · ${decision.action}`,
+        blocks: [
+            {
+                type: "context",
+                elements: [
+                    {
+                        type: "mrkdwn",
+                        text: `Recorded · *${decision.subsystem}* on \`${decision.condition}\` → \`${decision.action}\``,
+                    },
+                ],
+            },
+        ],
     });
+}
 
-    if (posted.ts) {
-        subscribe(objectId, {
-            surface: Surface.Slack,
-            audience: Audience.Lead,
-            channel: ENV.SLACK_CHANNEL_ID,
-            ts: posted.ts,
-        });
-        console.log(`slack view registered ts=${posted.ts}`);
+async function readThread(channel: string, ts?: string): Promise<Message[]> {
+    if (!client) return [];
+    try {
+        const result = ts
+            ? await client.conversations.replies({ channel, ts, limit: 50 })
+            : await client.conversations.history({ channel, limit: 25 });
+
+        const messages = (result.messages ?? [])
+            .filter((message) => !message.bot_id && message.text?.trim())
+            .map((message) => ({ by: message.user ?? "someone", text: message.text ?? "" }));
+
+        // history comes back newest first; a conversation reads the other way.
+        return ts ? messages : messages.reverse();
+    } catch (error) {
+        console.error("could not read conversation:", (error as Error).message);
+        return [];
     }
 }
 
-export async function updateSlack(object: SharedObject) {
+/**
+ * history and replies return user ids, not names. The conflict card has to say
+ * who decided each side, so an id there reads as a bug.
+ */
+async function personName(userId?: string): Promise<string> {
+    if (!userId) return Surface.Slack;
+    const cached = userNames.get(userId);
+    if (cached) return cached;
+    if (!client) return userId;
+    try {
+        const info = await client.users.info({ user: userId });
+        const name =
+            info.user?.profile?.display_name || info.user?.real_name || info.user?.name || userId;
+        userNames.set(userId, name);
+        return name;
+    } catch {
+        return userId;
+    }
+}
+
+async function channelName(channel: string): Promise<string> {
+    const cached = channelNames.get(channel);
+    if (cached) return cached;
+    if (!client) return channel;
+    try {
+        const info = await client.conversations.info({ channel });
+        const name = info.channel?.name ? `#${info.channel.name}` : channel;
+        channelNames.set(channel, name);
+        return name;
+    } catch {
+        return channel;
+    }
+}
+
+export async function updateSlack(conflict: Conflict) {
     if (!client) return;
-    for (const view of viewsOf(object.id)) {
+    for (const view of await viewsOf(conflict.id)) {
         if (view.surface !== Surface.Slack) continue;
         try {
             await client.chat.update({
                 channel: view.channel,
                 ts: view.ts,
-                text: summary(object),
-                blocks: renderSlack(object) as never[],
+                text: summary(conflict),
+                blocks: renderSlack(conflict) as never[],
             });
         } catch (error) {
             const message = (error as Error).message ?? "";
-            // The card was deleted. Stop trying to render into a dead window.
             if (message.includes("message_not_found")) {
-                unsubscribe(object.id, (candidate) => candidate === view);
+                await dropView(conflict.id, view);
                 console.warn("slack view dropped: message no longer exists");
                 continue;
             }
@@ -147,16 +238,18 @@ export async function updateSlack(object: SharedObject) {
 }
 
 function toAction(key: PromptKey, by: string, value: string): Action {
-    if (key === ActionType.Propose) return { type: ActionType.Propose, by, fix: value };
-    if (key === ActionType.Reject) return { type: ActionType.Reject, by, reason: value };
+    if (key === ActionType.Supersede) {
+        return { type: ActionType.Supersede, by, winner: Side.A, note: value };
+    }
     return { type: ActionType.Note, by, text: value };
 }
 
-function modal(key: PromptKey) {
+function modal(key: PromptKey, conflictId: string) {
     const prompt = PROMPTS[key];
     return {
         type: "modal",
         callback_id: `${key}_modal`,
+        private_metadata: conflictId,
         title: { type: "plain_text", text: prompt.title },
         submit: { type: "plain_text", text: prompt.submit },
         close: { type: "plain_text", text: "Cancel" },
@@ -171,10 +264,15 @@ function modal(key: PromptKey) {
     };
 }
 
+function conflictOf(args: ActionArgs): string | undefined {
+    const body = args.body as { actions?: { value?: string }[] };
+    return body.actions?.[0]?.value;
+}
+
 function who(body: { user?: { username?: string; name?: string } }): string {
     return body.user?.username ?? body.user?.name ?? Surface.Slack;
 }
 
-function summary(object: SharedObject): string {
-    return `Customer escalation: ${object.facts.what}`;
+function summary(conflict: Conflict): string {
+    return `Contradicting decisions about ${conflict.a.subsystem}`;
 }

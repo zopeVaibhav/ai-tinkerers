@@ -1,5 +1,6 @@
-import { ActionType, Audience, Status } from "@repo/types";
-import type { SharedObject } from "@repo/types";
+import { ActionType, Audience, ConflictStatus } from "@repo/types";
+import type { Conflict } from "@repo/types";
+import { headline } from "./slack";
 
 export type TelegramButton = { text: string; callback_data: ActionType };
 
@@ -9,49 +10,38 @@ export type TelegramPayload = {
 };
 
 /**
- * Pure function: object in, Telegram payload out.
+ * Pure function: conflict in, Telegram payload out.
  *
- * Deliberately thinner than Slack. This is someone holding a phone, so it is
- * one situation line and the single decision that is actually theirs — not the
- * Slack card shrunk down.
+ * Deliberately thinner than Slack. This is someone holding a phone, so it names
+ * the two rooms and the clash and offers the one thing they can actually do —
+ * not the Slack card shrunk down.
  */
-export function renderTelegram(object: SharedObject): TelegramPayload {
-    const { facts, framings } = object;
+export function renderTelegram(conflict: Conflict): TelegramPayload {
+    const { a, b, framings, status } = conflict;
 
     const lines = [
-        framings[Audience.Engineer] ?? facts.what,
+        framings[Audience.Engineer] ?? strip(headline(conflict)),
         "",
-        `${facts.severity.toUpperCase()} · ${facts.affected} users affected`,
+        `${a.threadName}: ${a.action}`,
+        `${b.threadName}: ${b.action}`,
     ];
 
-    if (facts.status === Status.AwaitingApproval && facts.proposedFix) {
-        lines.push("", `Proposed: ${facts.proposedFix}`);
+    if (status === ConflictStatus.Acknowledged && conflict.acknowledgedBy) {
+        lines.push("", `Seen by ${conflict.acknowledgedBy}.`);
     }
 
-    if (facts.status === Status.Approved) lines.push("", "Approved. Fix going out.");
-    if (facts.status === Status.Resolved) lines.push("", "Resolved.");
+    if (status === ConflictStatus.Resolved) {
+        lines.push("", `Resolved. ${conflict.resolution ?? ""}`.trim());
+    }
 
-    return { text: lines.join("\n"), reply_markup: { inline_keyboard: keyboard(object) } };
+    return { text: lines.join("\n"), reply_markup: { inline_keyboard: keyboard(conflict) } };
 }
 
-function keyboard(object: SharedObject): TelegramButton[][] {
-    const { status, acknowledgedBy } = object.facts;
+function keyboard(conflict: Conflict): TelegramButton[][] {
+    if (conflict.status !== ConflictStatus.Open) return [];
+    return [[{ text: "Acknowledge", callback_data: ActionType.Acknowledge }]];
+}
 
-    if (status === Status.Triage) {
-        return acknowledgedBy ? [] : [[{ text: "Take it", callback_data: ActionType.Acknowledge }]];
-    }
-
-    if (status === Status.AwaitingApproval) {
-        return [
-            [
-                { text: "Approve", callback_data: ActionType.Approve },
-                { text: "Reject", callback_data: ActionType.Reject },
-            ],
-        ];
-    }
-
-    if (status === Status.Approved)
-        return [[{ text: "Resolve", callback_data: ActionType.Resolve }]];
-
-    return [];
+function strip(text: string): string {
+    return text.replace(/[*`_]/g, "");
 }

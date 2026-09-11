@@ -1,58 +1,45 @@
 import { z } from "zod";
-import { ActionType, Audience, Severity } from "@repo/types";
-import type { Action, SharedObject } from "@repo/types";
+import { ActionType, Audience } from "@repo/types";
+import type { Action, Conflict } from "@repo/types";
 import { ask } from "./client";
 
 /**
- * Job 1 — intake. Turn an unstructured customer message into facts.
- * Plain code cannot do this.
- */
-const intakeSchema = z.object({
-    what: z.string().min(1),
-    severity: z.enum(Severity),
-    affected: z.number().int().min(0),
-});
-
-export async function intake(raw: string, from: string): Promise<Action | null> {
-    const result = await ask(
-        [
-            "You triage inbound customer reports for a software team.",
-            "Return JSON only, with keys: what, severity, affected.",
-            "what: one plain sentence describing what is broken, no jargon, no blame.",
-            "severity: low, medium or high, judged by user impact.",
-            "affected: your best integer estimate of users affected, 0 if the message gives no clue.",
-            "Never invent detail that is not in the message.",
-        ].join("\n"),
-        raw,
-        intakeSchema,
-    );
-
-    if (!result) return null;
-    return { type: ActionType.Intake, by: from, ...result };
-}
-
-/**
- * Job 2 — framing. One truth, three readers who need different things from it.
- * This is the job that makes the model load-bearing: without it every surface
- * shows the same blob of text, which defeats being on three surfaces at all.
+ * The agent's wording job. One conflict, two readers who need different things
+ * from it: the engineer on a phone needs the decision, the lead in the channel
+ * needs the shape of the disagreement.
+ *
+ * Extraction — turning a thread into a structured claim — is issue #5.
  */
 const framingSchema = z.object({
     [Audience.Engineer]: z.string().min(1),
     [Audience.Lead]: z.string().min(1),
-    [Audience.Customer]: z.string().min(1),
 });
 
-export async function reframe(object: SharedObject): Promise<Action | null> {
+export async function reframe(conflict: Conflict): Promise<Action | null> {
     const result = await ask(
         [
-            "You write the same situation three ways for three different readers.",
-            "Return JSON only, with keys: engineer, lead, customer.",
-            "engineer: on a phone, off hours. Terse and technical. Name the one decision they must make. Max 2 short sentences.",
-            "lead: in a team channel. What happened, who owns it, what is blocked. Max 2 sentences.",
-            "customer: waiting for an answer. Calm, no internal detail, no jargon, no blame, no promises about timing. Max 2 sentences.",
-            "Use only the facts given. Never invent a cause, a fix or a deadline.",
+            "Two teams decided contradicting things without knowing about each other.",
+            "Return JSON only, with keys: engineer, lead.",
+            "engineer: on a phone. Name both rooms and the clash in one short sentence.",
+            "lead: in a team channel. What was decided where, and what breaks if both ship. Max 2 sentences.",
+            "Use only the claims given. Never invent a cause, a fix or a deadline.",
         ].join("\n"),
-        JSON.stringify(object.facts),
+        JSON.stringify({
+            subsystem: conflict.a.subsystem,
+            condition: conflict.a.condition,
+            sides: [
+                {
+                    thread: conflict.a.threadName,
+                    action: conflict.a.action,
+                    said: conflict.a.rawText,
+                },
+                {
+                    thread: conflict.b.threadName,
+                    action: conflict.b.action,
+                    said: conflict.b.rawText,
+                },
+            ],
+        }),
         framingSchema,
     );
 

@@ -1,18 +1,19 @@
 import cors from "cors";
 import express from "express";
-import { ActionType, Audience } from "@repo/types";
+import { Audience } from "@repo/types";
 import type { Action } from "@repo/types";
 import { ENABLED, ENV } from "./config/env";
-import { apply, getObject, onChange, reset } from "./store";
+import { act } from "./actions";
+import { getConflict, listConflicts, listDecisions, onChange, persist } from "./repository";
+import { record } from "./decisions";
+import { detect } from "./detect";
+import { extract } from "./agent/extract";
+import { reframe } from "./agent";
+import type { Message } from "./agent/extract";
+import type { ThreadRef } from "./decisions";
 import { openStream, pushWeb } from "./adapters/web";
-import { startSlack, updateSlack } from "./adapters/slack";
+import { confirmDecision, startSlack, updateSlack } from "./adapters/slack";
 import { startTelegram, updateTelegram } from "./adapters/telegram";
-import { intake, reframe } from "./agent";
-import { load, save } from "./persist";
-
-const OBJECT_ID = "demo";
-
-load();
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -22,60 +23,68 @@ app.get("/health", (_req, res) => {
     res.json({ ok: true, surfaces: ENABLED });
 });
 
+app.get("/conflicts", async (_req, res) => {
+    res.json(await listConflicts());
+});
+
+app.get("/decisions", async (_req, res) => {
+    res.json(await listDecisions());
+});
+
 app.get("/stream", (req, res) => {
-    openStream(req, res, OBJECT_ID, getObject(OBJECT_ID));
+    void openStream(req, res);
 });
 
-app.post("/action", (req, res) => {
-    res.json(dispatch(req.body as Action, Audience.Lead));
+app.post("/conflicts/:id/action", async (req, res) => {
+    const conflict = await act(req.params.id, req.body as Action, Audience.Lead);
+    if (!conflict) return res.status(404).json({ error: "no such conflict" });
+    return res.json(conflict);
 });
-
-app.post("/reset", (_req, res) => {
-    res.json(reset(OBJECT_ID));
-});
-
-/** Raw, unstructured text from a customer. The agent turns it into facts. */
-app.post("/report", async (req, res) => {
-    const { text, from } = req.body as { text?: string; from?: string };
-    if (!text?.trim()) return res.status(400).json({ error: "text is required" });
-    if (!ENABLED.agent) return res.status(503).json({ error: "agent is not configured" });
-
-    const action = await intake(text, from ?? Audience.Customer);
-    if (!action) return res.status(502).json({ error: "agent could not read that message" });
-    return res.json(dispatch(action, Audience.Lead));
-});
-
-/** The single write path. Every surface and the agent come through here. */
-function dispatch(action: Action, from: Audience) {
-    const object = apply(OBJECT_ID, action, from);
-    if (shouldReframe(action)) void rewrite();
-    return object;
-}
-
-/** Raw text from any surface becomes facts, or nothing if the agent is off. */
-async function report(text: string, by: string): Promise<Action | null> {
-    if (!ENABLED.agent) return null;
-    return intake(text, by);
-}
 
 /**
- * Framings are the agent's wording of the facts, so they are refreshed
- * whenever the facts move — and never in response to its own writes.
+ * One thread, one agent. It re-reads the thread once the typing stops, decides
+ * whether anything was settled, and records it. Most of the time the answer is
+ * no and nothing happens at all.
+ *
+ * Comparing this decision against the registry is issue #6.
  */
-function shouldReframe(action: Action): boolean {
-    return ENABLED.agent && action.type !== ActionType.Reframe && action.type !== ActionType.Note;
+async function readThread(thread: ThreadRef, messages: Message[], lastSpeaker: string) {
+    if (!ENABLED.agent) return;
+
+    const claim = await extract(messages);
+    if (!claim) {
+        console.log(`${thread.threadName}: nothing decided yet`);
+        for (const message of messages.slice(-4)) {
+            console.log(`    ${message.by}: ${message.text.slice(0, 90)}`);
+        }
+        return;
+    }
+
+    const result = await record(thread, claim, lastSpeaker);
+    if (!result?.changed) return;
+
+    console.log(
+        `decision recorded ${thread.threadName}: ${claim.subsystem}/${claim.condition} -> ${claim.action}`,
+    );
+    await confirmDecision(result.decision);
+    void pushWeb();
+
+    for (const conflict of await detect(result.decision)) void rewrite(conflict.id);
 }
 
-let rewriting = false;
+const rewriting = new Set<string>();
 
-async function rewrite() {
-    if (rewriting) return;
-    rewriting = true;
+/** Framings are the agent's wording of the clash, written once it is found. */
+async function rewrite(conflictId: string) {
+    if (!ENABLED.agent || rewriting.has(conflictId)) return;
+    rewriting.add(conflictId);
     try {
-        const action = await reframe(getObject(OBJECT_ID));
-        if (action) apply(OBJECT_ID, action);
+        const current = await getConflict(conflictId);
+        if (!current) return;
+        const action = await reframe(current);
+        if (action) await persist(current, action);
     } finally {
-        rewriting = false;
+        rewriting.delete(conflictId);
     }
 }
 
@@ -83,27 +92,28 @@ async function rewrite() {
  * The single fan-out point. One change event, every registered view re-rendered.
  * No surface talks to another surface. Ever.
  */
-onChange((object) => {
-    save();
-    pushWeb(object);
-    void updateSlack(object);
-    void updateTelegram(object);
+onChange((conflict) => {
+    void pushWeb();
+    void updateSlack(conflict);
+    void updateTelegram(conflict);
 });
 
 app.listen(ENV.SERVER_PORT, async () => {
     console.log(`server on http://localhost:${ENV.SERVER_PORT}`);
 
     if (ENABLED.slack) {
-        await startSlack(OBJECT_ID, getObject(OBJECT_ID), dispatch, report).catch((error: Error) =>
+        await startSlack(apply, readThread).catch((error: Error) =>
             console.error("slack failed to start:", error.message),
         );
     }
 
     if (ENABLED.telegram) {
-        await startTelegram(OBJECT_ID, getObject(OBJECT_ID), dispatch, report).catch(
-            (error: Error) => console.error("telegram failed to start:", error.message),
+        await startTelegram(apply).catch((error: Error) =>
+            console.error("telegram failed to start:", error.message),
         );
     }
-
-    save();
 });
+
+function apply(conflictId: string, action: Action, from: Audience) {
+    return act(conflictId, action, from);
+}

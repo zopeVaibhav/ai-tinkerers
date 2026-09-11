@@ -1,9 +1,9 @@
-import type { SharedObject } from "@repo/types";
+import type { Conflict } from "@repo/types";
 
 /**
- * The web surface renders the object itself in React, so this is identity.
+ * The web surface renders the conflict itself in React, so this is identity.
  * It exists so every surface goes through the same contract.
  */
-export function renderWeb(object: SharedObject): SharedObject {
-    return object;
+export function renderWeb(conflict: Conflict): Conflict {
+    return conflict;
 }
