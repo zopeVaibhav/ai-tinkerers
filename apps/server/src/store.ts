@@ -1,4 +1,5 @@
-import { createObject, reduce } from "@repo/core";
+import { can, createObject, isSelfApproval, isValid, reduce } from "@repo/core";
+import { Audience } from "@repo/types";
 import type { Action, SharedObject } from "@repo/types";
 
 type Listener = (object: SharedObject) => void;
@@ -19,11 +20,37 @@ export function getObject(id: string): SharedObject {
  * The only write path. Every surface and the agent go through here.
  * Applying an action fires one change event; fan-out happens in the caller.
  */
-export function apply(id: string, action: Action): SharedObject {
-    const next = reduce(getObject(id), action);
+export function apply(id: string, action: Action, from = Audience.Lead): SharedObject {
+    const current = getObject(id);
+
+    if (!can(from, action.type)) {
+        console.log(`refused ${action.type} from ${from}: not allowed on that surface`);
+        return current;
+    }
+
+    if (isSelfApproval(current, action)) {
+        console.log(`refused ${action.type} from ${action.by}: cannot approve own proposal`);
+        return current;
+    }
+
+    // A tap against a state that has already moved on changes nothing.
+    if (!isValid(current, action)) {
+        console.log(`ignored stale ${action.type} from ${action.by}`);
+        return current;
+    }
+
+    const next = reduce(current, action);
     objects.set(id, next);
     for (const listener of listeners) listener(next);
     return next;
+}
+
+/** Start the object over. Needed for repeated demo takes, not for production. */
+export function reset(id: string): SharedObject {
+    const fresh = createObject(id);
+    objects.set(id, fresh);
+    for (const listener of listeners) listener(fresh);
+    return fresh;
 }
 
 export function onChange(listener: Listener): () => void {

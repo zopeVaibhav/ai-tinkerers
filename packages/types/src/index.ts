@@ -1,6 +1,6 @@
-export type Surface = "slack" | "telegram" | "web";
+import { ActionType, Audience, Severity, Status, Surface } from "./enums";
 
-export type Audience = "engineer" | "lead" | "customer";
+export { ActionType, Audience, Severity, Status, Surface };
 
 /**
  * A live window onto one shared object. The subscription table maps
@@ -8,9 +8,9 @@ export type Audience = "engineer" | "lead" | "customer";
  * forward messages between platforms, we re-render every registered view.
  */
 export type ViewRef =
-    | { surface: "slack"; channel: string; ts: string }
-    | { surface: "telegram"; chatId: number; messageId: number }
-    | { surface: "web"; connectionId: string };
+    | { surface: Surface.Slack; audience: Audience; channel: string; ts: string }
+    | { surface: Surface.Telegram; audience: Audience; chatId: number; messageId: number }
+    | { surface: Surface.Web; audience: Audience; connectionId: string };
 
 export type TimelineEntry = {
     at: string;
@@ -20,15 +20,22 @@ export type TimelineEntry = {
 
 /**
  * The single source of truth. Every surface renders this and nothing else.
- * `facts` is what is true. `framings` is the agent's per-audience wording.
- * Renderers read both, but never call a model.
+ *
+ * `facts` is what is true — deterministic, written by actions.
+ * `framings` is the agent's per-audience wording of those same facts.
+ * Renderers read both. Renderers never call a model.
  */
 export type SharedObject = {
     id: string;
     version: number;
     facts: {
-        count: number;
-        status: "open" | "awaiting_approval" | "resolved";
+        what: string;
+        severity: Severity;
+        affected: number;
+        acknowledgedBy: string | null;
+        proposedFix: string | null;
+        approvedBy: string | null;
+        status: Status;
     };
     framings: Partial<Record<Audience, string>>;
     timeline: TimelineEntry[];
@@ -39,6 +46,11 @@ export type SharedObject = {
  * before it touches the store. Nothing downstream knows which app it came from.
  */
 export type Action =
-    | { type: "increment"; by: string }
-    | { type: "decrement"; by: string }
-    | { type: "reset"; by: string };
+    | { type: ActionType.Intake; by: string; what: string; severity: Severity; affected: number }
+    | { type: ActionType.Acknowledge; by: string }
+    | { type: ActionType.Propose; by: string; fix: string }
+    | { type: ActionType.Approve; by: string }
+    | { type: ActionType.Reject; by: string; reason: string }
+    | { type: ActionType.Resolve; by: string }
+    | { type: ActionType.Note; by: string; text: string }
+    | { type: ActionType.Reframe; by: string; framings: Partial<Record<Audience, string>> };
