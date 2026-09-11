@@ -7,15 +7,16 @@
         ".": "./src/index.ts"
     },
     "scripts": {
-        "generate": "prisma generate",
-        "db:push": "prisma db push",
-        "db:migrate": "prisma migrate dev",
-        "studio": "prisma studio",
-        "typecheck": "tsc --noEmit",
-        "db:seed": "bun run src/seed.ts"
+        "generate": "bun --env-file=../../.env x prisma generate",
+        "db:push": "bun --env-file=../../.env x prisma db push",
+        "db:migrate": "bun --env-file=../../.env x prisma migrate dev",
+        "db:seed": "bun --env-file=../../.env run src/seed.ts",
+        "studio": "bun --env-file=../../.env x prisma studio",
+        "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@prisma/client": "^6.19.0"
+        "@prisma/client": "^6.19.0",
+        "dotenv": "^17.4.2"
     },
     "devDependencies": {
         "@types/node": "^22.20.2",
