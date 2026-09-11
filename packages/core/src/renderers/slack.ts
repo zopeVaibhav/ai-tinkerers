@@ -1,4 +1,4 @@
-import { ActionType, Audience, Status } from "@repo/types";
+import { ActionType, Audience, Control, Status } from "@repo/types";
 import type { SharedObject } from "@repo/types";
 
 /**
@@ -86,10 +86,19 @@ function actionsFor(object: SharedObject): unknown[] {
 
     if (status !== Status.Resolved) buttons.push(button(ActionType.Note, "Add note", id));
 
+    // Reading the past is not an action on the object. It opens a modal, which
+    // is private to whoever clicked, so the card itself never moves.
+    if (object.version > 0) buttons.push(button(Control.History, `History · v${object.version}`, id));
+
     return buttons;
 }
 
-function button(actionId: ActionType, text: string, issueId: string, style?: "primary" | "danger") {
+function button(
+    actionId: ActionType | Control,
+    text: string,
+    issueId: string,
+    style?: "primary" | "danger",
+) {
     return {
         type: "button",
         action_id: actionId,
@@ -105,4 +114,30 @@ function recent(timeline: SharedObject["timeline"]): string {
         .slice(-3)
         .map((entry) => `${entry.by} ${entry.what}`)
         .join("  ·  ");
+}
+
+/**
+ * The object's past, as Block Kit. Pure like every other renderer: versions in,
+ * markup out. Shown in a modal, which is private to one person, so reading
+ * history never disturbs the card everyone else is looking at.
+ */
+export function renderHistory(versions: SharedObject[]): unknown[] {
+    if (versions.length <= 1) {
+        return [{ type: "section", text: { type: "mrkdwn", text: "_nothing has changed yet_" } }];
+    }
+
+    // A modal takes 100 blocks. A long-running issue can pass that, and the
+    // recent past is the part anyone opens this to read.
+    return [...versions]
+        .reverse()
+        .slice(0, 100)
+        .map((version) => {
+            const entry = version.timeline[version.timeline.length - 1];
+            const when = entry ? new Date(entry.at).toLocaleTimeString() : "start";
+            const what = entry ? `*${entry.by}* ${entry.what}` : "_issue raised_";
+            return {
+                type: "context",
+                elements: [{ type: "mrkdwn", text: `*v${version.version}* · ${when} · ${what}` }],
+            };
+        });
 }

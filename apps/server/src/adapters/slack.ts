@@ -1,9 +1,9 @@
 import { App, LogLevel } from "@slack/bolt";
-import { renderSlack } from "@repo/core";
-import { ActionType, Audience, Surface } from "@repo/types";
+import { renderHistory, renderSlack } from "@repo/core";
+import { ActionType, Audience, Control, Surface } from "@repo/types";
 import type { Action, SharedObject } from "@repo/types";
 import { ENV } from "../config/env";
-import { addView, dropView, viewsOf } from "../repository";
+import { addView, dropView, versionsOf, viewsOf } from "../repository";
 
 type SlackClient = InstanceType<typeof App>["client"];
 
@@ -24,6 +24,7 @@ type ViewArgs = {
 
 type MentionArgs = {
     event: { text: string; user?: string };
+    client: SlackClient;
 };
 
 let client: SlackClient | null = null;
@@ -82,9 +83,43 @@ export async function startSlack(
         });
     }
 
+    // Read-only. A modal is private to whoever clicked, so the shared card
+    // stays exactly where it is for everyone else.
+    app.action(Control.History, async (args: ActionArgs) => {
+        await args.ack();
+        const issueId = issueOf(args);
+        if (!args.body.trigger_id || !issueId) return;
+
+        // A trigger_id dies three seconds after the click, and rebuilding the
+        // past is a round trip to Postgres. Spend the trigger immediately on an
+        // empty modal, then fill it in — otherwise a slow query means no window
+        // opens at all, which reads as the app being broken.
+        const opened = await args.client.views.open({
+            trigger_id: args.body.trigger_id,
+            view: historyView([
+                { type: "context", elements: [{ type: "mrkdwn", text: "_reading the log…_" }] },
+            ]) as never,
+        });
+
+        const viewId = opened.view?.id;
+        if (!viewId) return;
+
+        try {
+            await args.client.views.update({
+                view_id: viewId,
+                view: historyView(renderHistory(await versionsOf(issueId))) as never,
+            });
+        } catch (error) {
+            // The reader closed the window before the log came back. Nothing to
+            // render into, and nothing worth shouting about.
+            console.warn("slack history update failed:", (error as Error).message);
+        }
+    });
+
     app.event("app_mention", async (args: MentionArgs) => {
         const text = args.event.text.replace(/<@[^>]+>/g, "").trim();
-        if (text) await raise(text, args.event.user ?? Surface.Slack, Surface.Slack);
+        if (!text) return;
+        await raise(text, await nameOf(args.client, args.event.user), Surface.Slack);
     });
 
     await app.start();
@@ -162,6 +197,46 @@ function modal(key: PromptKey, issueId: string) {
 function issueOf(args: ActionArgs): string | undefined {
     const body = args.body as { actions?: { value?: string }[] };
     return body.actions?.[0]?.value;
+}
+
+/**
+ * Events carry a user id, never a name, so the raw `U…` would land in `raisedBy`
+ * and be drawn on the card. Buttons already arrive with a name attached, so only
+ * this path has to ask. Cached: the same handful of people mention the bot all
+ * day, and a workspace lookup per mention is a round trip for an answer that
+ * does not change.
+ */
+const names = new Map<string, string>();
+
+async function nameOf(client: SlackClient, id?: string): Promise<string> {
+    if (!id) return Surface.Slack;
+
+    const cached = names.get(id);
+    if (cached) return cached;
+
+    try {
+        const { user } = await client.users.info({ user: id });
+        const name = user?.profile?.display_name || user?.real_name || user?.name;
+        // An id is a poor label, but it is honest and still identifies one
+        // person. Better than attributing the report to nobody.
+        if (!name) return id;
+        names.set(id, name);
+        return name;
+    } catch (error) {
+        // Almost always a missing `users:read` scope. Worth saying out loud once
+        // rather than quietly writing ids into the database forever.
+        console.warn(`slack could not resolve ${id}:`, (error as Error).message);
+        return id;
+    }
+}
+
+function historyView(blocks: unknown[]) {
+    return {
+        type: "modal",
+        title: { type: "plain_text", text: "History" },
+        close: { type: "plain_text", text: "Close" },
+        blocks,
+    };
 }
 
 function who(body: { user?: { username?: string; name?: string } }): string {

@@ -16,6 +16,8 @@
     ],
     "tasks": {
         "generate": { "cache": false },
+        "db:push": { "cache": false },
+        "db:migrate": { "cache": false },
         "build": {
             "dependsOn": ["^build", "^generate"],
             "inputs": ["$TURBO_DEFAULT$", ".env*"],

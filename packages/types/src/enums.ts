@@ -33,3 +33,11 @@ export enum ActionType {
     Note = "note",
     Reframe = "reframe",
 }
+
+/**
+ * Read-only controls. They open a local view of the object's past and never
+ * reach the store, so they are deliberately not part of ActionType.
+ */
+export enum Control {
+    History = "history",
+}

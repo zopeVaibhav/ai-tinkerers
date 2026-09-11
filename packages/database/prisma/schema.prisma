@@ -33,6 +33,17 @@ enum Audience {
     customer
 }
 
+enum ActionType {
+    intake
+    acknowledge
+    propose
+    approve
+    reject
+    resolve
+    note
+    reframe
+}
+
 /// One shared object. Every surface renders this and nothing else.
 model Issue {
     id        String   @id @default(cuid())
@@ -61,13 +72,20 @@ model Issue {
 }
 
 /// Append-only. One row per applied action.
+///
+/// `what` is the English rendering of the action, which is all a timeline needs.
+/// `type` and `payload` keep the action itself, so the reducer can replay the
+/// log and rebuild any version the object has ever been. Nullable because rows
+/// written before this existed cannot be replayed and must not be guessed at.
 model Event {
-    id      String   @id @default(cuid())
+    id      String      @id @default(cuid())
     issueId String
-    issue   Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
-    at      DateTime @default(now())
+    issue   Issue       @relation(fields: [issueId], references: [id], onDelete: Cascade)
+    at      DateTime    @default(now())
     by      String
     what    String
+    type    ActionType?
+    payload Json        @default("{}")
 
     @@index([issueId, at])
 }

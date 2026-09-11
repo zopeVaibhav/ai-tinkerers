@@ -34,6 +34,8 @@ export default function Page() {
     const [name, setName] = useState("");
     const [report, setReport] = useState("");
     const [thinking, setThinking] = useState(false);
+    const [history, setHistory] = useState<SharedObject[] | null>(null);
+    const [at, setAt] = useState<number | null>(null);
 
     useEffect(() => {
         setName(localStorage.getItem("name") ?? "");
@@ -47,10 +49,32 @@ export default function Page() {
         [issues, selected],
     );
 
+    // Stepping through one issue's past says nothing about the next one.
+    useEffect(() => {
+        setHistory(null);
+        setAt(null);
+    }, [issue?.id]);
+
+    async function openHistory() {
+        if (!issue) return;
+        const response = await fetch(`${SERVER}/issues/${issue.id}/history`);
+        if (!response.ok) return;
+        const versions = (await response.json()) as SharedObject[];
+        setHistory(versions);
+        setAt(versions.length - 1);
+    }
+
     function rename(value: string) {
         setName(value);
         localStorage.setItem("name", value);
     }
+
+    /**
+     * The past is read-only. Nothing here writes, so a second person acting on
+     * the live object never disturbs whoever is reading back through it.
+     */
+    const past = at !== null && history !== null && at < history.length - 1;
+    const shown = at !== null && history !== null ? history[at] : issue;
 
     async function sendReport() {
         if (!report.trim()) return;
@@ -153,39 +177,83 @@ export default function Page() {
                     ))}
                 </ol>
 
-                {issue && (
+                {issue && shown && (
                     <div className="flex flex-col gap-5">
                         <section className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-5">
                             <div className="flex flex-wrap items-center gap-3 text-sm">
                                 <span
-                                    className={`rounded-full px-3 py-1 ${STATUS_STYLE[issue.facts.status]}`}
+                                    className={`rounded-full px-3 py-1 ${STATUS_STYLE[shown.facts.status]}`}
                                 >
-                                    {STATUS_LABEL[issue.facts.status]}
+                                    {STATUS_LABEL[shown.facts.status]}
                                 </span>
                                 <span className="text-neutral-500">
-                                    raised by {issue.raisedBy} via {issue.raisedOn} · owner{" "}
-                                    {issue.facts.acknowledgedBy ?? "unassigned"} · v{issue.version}
+                                    raised by {shown.raisedBy} via {shown.raisedOn} · owner{" "}
+                                    {shown.facts.acknowledgedBy ?? "unassigned"} · v{shown.version}
                                 </span>
+                                {history === null ? (
+                                    <button
+                                        onClick={openHistory}
+                                        className="rounded-lg border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-50"
+                                    >
+                                        History
+                                    </button>
+                                ) : (
+                                    <span className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => setAt((index) => Math.max(0, (index ?? 0) - 1))}
+                                            disabled={at === 0}
+                                            className="rounded-lg border border-neutral-300 px-2 py-1 text-xs disabled:opacity-30"
+                                        >
+                                            ◀
+                                        </button>
+                                        <button
+                                            onClick={() =>
+                                                setAt((index) =>
+                                                    Math.min(history.length - 1, (index ?? 0) + 1),
+                                                )
+                                            }
+                                            disabled={at === history.length - 1}
+                                            className="rounded-lg border border-neutral-300 px-2 py-1 text-xs disabled:opacity-30"
+                                        >
+                                            ▶
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setHistory(null);
+                                                setAt(null);
+                                            }}
+                                            className="rounded-lg border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-50"
+                                        >
+                                            Back to live
+                                        </button>
+                                    </span>
+                                )}
                             </div>
-                            <p className="text-lg">{issue.facts.what}</p>
+                            {past && (
+                                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                                    Reading v{shown.version} of {history.length - 1}. The past is
+                                    read-only — the live object is still moving without you.
+                                </p>
+                            )}
+                            <p className="text-lg">{shown.facts.what}</p>
 
-                            {issue.facts.proposedFix && (
+                            {shown.facts.proposedFix && (
                                 <p className="rounded-lg bg-neutral-50 p-3 text-sm">
                                     <span className="text-neutral-500">Proposed fix — </span>
-                                    {issue.facts.proposedFix}
-                                    {issue.facts.approvedBy && (
+                                    {shown.facts.proposedFix}
+                                    {shown.facts.approvedBy && (
                                         <span className="text-neutral-500">
                                             {" "}
-                                            (approved by {issue.facts.approvedBy})
+                                            (approved by {shown.facts.approvedBy})
                                         </span>
                                     )}
                                 </p>
                             )}
 
-                            <div className="flex flex-wrap gap-2">
-                                {issue.facts.status === Status.Triage && (
+                            <div className={`flex flex-wrap gap-2 ${past ? "hidden" : ""}`}>
+                                {shown.facts.status === Status.Triage && (
                                     <>
-                                        {!issue.facts.acknowledgedBy && (
+                                        {!shown.facts.acknowledgedBy && (
                                             <Btn
                                                 onClick={() =>
                                                     send({ type: ActionType.Acknowledge })
@@ -203,7 +271,7 @@ export default function Page() {
                                         />
                                     </>
                                 )}
-                                {issue.facts.status === Status.AwaitingApproval && (
+                                {shown.facts.status === Status.AwaitingApproval && (
                                     <>
                                         <Btn onClick={() => send({ type: ActionType.Approve })}>
                                             Approve
@@ -217,7 +285,7 @@ export default function Page() {
                                         />
                                     </>
                                 )}
-                                {issue.facts.status === Status.Approved && (
+                                {shown.facts.status === Status.Approved && (
                                     <Btn onClick={() => send({ type: ActionType.Resolve })}>
                                         Resolve
                                     </Btn>
@@ -232,7 +300,7 @@ export default function Page() {
                             </div>
                         </section>
 
-                        {Object.keys(issue.framings).length > 0 && (
+                        {Object.keys(shown.framings).length > 0 && (
                             <section className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-5">
                                 <h2 className="text-sm font-medium text-neutral-500">
                                     Same facts, three readers
@@ -244,7 +312,7 @@ export default function Page() {
                                                 {audience}
                                             </span>
                                             <p className="text-sm text-neutral-700">
-                                                {issue.framings[audience] ?? "—"}
+                                                {shown.framings[audience] ?? "—"}
                                             </p>
                                         </div>
                                     ))}
@@ -255,7 +323,7 @@ export default function Page() {
                         <section className="flex flex-col gap-2 rounded-xl border border-neutral-200 bg-white p-5">
                             <h2 className="text-sm font-medium text-neutral-500">Timeline</h2>
                             <ol className="flex flex-col gap-1 text-sm">
-                                {issue.timeline.map((entry, index) => (
+                                {shown.timeline.map((entry, index) => (
                                     <li key={index} className="text-neutral-700">
                                         <span className="text-neutral-400">
                                             {new Date(entry.at).toLocaleTimeString()}

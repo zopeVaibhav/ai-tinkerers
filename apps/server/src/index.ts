@@ -5,7 +5,7 @@ import type { Action, SharedObject } from "@repo/types";
 import { ENABLED, ENV } from "./config/env";
 import { act } from "./actions";
 import { intake, reframe } from "./agent";
-import { createIssue, getIssue, listIssues, persist, publish } from "./repository";
+import { createIssue, getIssue, listIssues, persist, publish, versionsOf } from "./repository";
 import { onChange } from "./repository";
 import { openStream, pushWeb } from "./adapters/web";
 import { postIssue as postSlack, startSlack, updateSlack } from "./adapters/slack";
@@ -30,6 +30,13 @@ app.get("/issues", async (_req, res) => {
 
 app.get("/stream", (req, res) => {
     void openStream(req, res);
+});
+
+/** Read-only. Looking at the past never writes and never moves a card. */
+app.get("/issues/:id/history", async (req, res) => {
+    const versions = await versionsOf(req.params.id);
+    if (!versions.length) return res.status(404).json({ error: "no such issue" });
+    return res.json(versions);
 });
 
 app.post("/issues/:id/action", async (req, res) => {

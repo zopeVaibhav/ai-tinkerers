@@ -1,4 +1,4 @@
-import { reduce } from "@repo/core";
+import { createObject, reduce } from "@repo/core";
 import { prisma } from "@repo/database";
 import { ActionType, Audience, Severity, Status, Surface } from "@repo/types";
 import type { Action, SharedObject, ViewRef } from "@repo/types";
@@ -31,7 +31,14 @@ export async function createIssue(
             affected: action.affected,
             status: Status.Triage,
             version: 1,
-            timeline: { create: { by: action.by, what: `reported: ${action.what}` } },
+            timeline: {
+                create: {
+                    by: action.by,
+                    what: `reported: ${action.what}`,
+                    type: action.type,
+                    payload: action,
+                },
+            },
         },
         include: INCLUDE,
     });
@@ -50,6 +57,54 @@ export async function listIssues(): Promise<SharedObject[]> {
         take: 50,
     });
     return rows.map(toDomain);
+}
+
+/**
+ * Every version this issue has ever been, oldest first.
+ *
+ * Nothing is stored twice to make this work. The event log already holds every
+ * action that was applied, and the reducer is pure, so replaying the log from a
+ * fresh object rebuilds each version exactly as it was. This is what lets a
+ * window show the past without a second object and without posting a new card.
+ */
+export async function versionsOf(issueId: string): Promise<SharedObject[]> {
+    const row = await prisma.issue.findUnique({ where: { id: issueId }, include: INCLUDE });
+    if (!row) return [];
+
+    // `INCLUDE` already brought the event rows back with the issue, ordered, so
+    // the log is in hand. Querying for it again would double a round trip that
+    // a Slack modal is waiting on against a trigger expiring in three seconds.
+    const events = row.timeline;
+
+    // Rows written before events carried their action cannot be replayed.
+    // Inferring one from the English would put words in someone's mouth, so the
+    // honest answer is the live object on its own.
+    if (events.some((event) => !event.type)) return [toDomain(row)];
+
+    const seed: SharedObject = {
+        ...createObject(row.id, row.raisedBy, row.raisedOn as Surface),
+        createdAt: row.createdAt.toISOString(),
+    };
+
+    const versions: SharedObject[] = [seed];
+    let current = seed;
+
+    for (const event of events) {
+        const next = reduce(current, event.payload as unknown as Action);
+        // The reducer stamps the new entry with now, because that is true when
+        // an action is applied. Replaying, the event knows when it happened.
+        const entry = next.timeline[next.timeline.length - 1];
+        if (entry) {
+            next.timeline = [
+                ...next.timeline.slice(0, -1),
+                { ...entry, at: event.at.toISOString() },
+            ];
+        }
+        versions.push(next);
+        current = next;
+    }
+
+    return versions;
 }
 
 /**
@@ -72,7 +127,18 @@ export async function persist(current: SharedObject, action: Action): Promise<Sh
             approvedBy: next.facts.approvedBy,
             status: next.facts.status,
             framings: next.framings,
-            ...(entry ? { timeline: { create: { by: entry.by, what: entry.what } } } : {}),
+            ...(entry
+                ? {
+                      timeline: {
+                          create: {
+                              by: entry.by,
+                              what: entry.what,
+                              type: action.type,
+                              payload: action,
+                          },
+                      },
+                  }
+                : {}),
         },
         include: INCLUDE,
     });
@@ -131,7 +197,7 @@ type Row = {
     approvedBy: string | null;
     status: string;
     framings: unknown;
-    timeline: { at: Date; by: string; what: string }[];
+    timeline: { at: Date; by: string; what: string; type: string | null; payload: unknown }[];
 };
 
 function toDomain(row: Row): SharedObject {

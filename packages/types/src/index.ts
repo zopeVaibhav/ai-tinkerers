@@ -1,6 +1,6 @@
-import { ActionType, Audience, Severity, Status, Surface } from "./enums";
+import { ActionType, Audience, Control, Severity, Status, Surface } from "./enums";
 
-export { ActionType, Audience, Severity, Status, Surface };
+export { ActionType, Audience, Control, Severity, Status, Surface };
 
 /**
  * A live window onto one shared object. The subscription table maps
