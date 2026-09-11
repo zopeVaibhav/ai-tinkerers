@@ -5,8 +5,12 @@ import type { Action } from "@repo/types";
 import { ENABLED, ENV } from "./config/env";
 import { act } from "./actions";
 import { listConflicts, listDecisions, onChange } from "./repository";
+import { record } from "./decisions";
+import { extract } from "./agent/extract";
+import type { Message } from "./agent/extract";
+import type { ThreadRef } from "./decisions";
 import { openStream, pushWeb } from "./adapters/web";
-import { startSlack, updateSlack } from "./adapters/slack";
+import { confirmDecision, startSlack, updateSlack } from "./adapters/slack";
 import { startTelegram, updateTelegram } from "./adapters/telegram";
 
 const app = express();
@@ -36,6 +40,28 @@ app.post("/conflicts/:id/action", async (req, res) => {
 });
 
 /**
+ * One thread, one agent. It re-reads the thread once the typing stops, decides
+ * whether anything was settled, and records it. Most of the time the answer is
+ * no and nothing happens at all.
+ *
+ * Comparing this decision against the registry is issue #6.
+ */
+async function readThread(thread: ThreadRef, messages: Message[], lastSpeaker: string) {
+    if (!ENABLED.agent) return;
+
+    const claim = await extract(messages);
+    if (!claim) return;
+
+    const result = await record(thread, claim, lastSpeaker);
+    if (!result?.changed) return;
+
+    console.log(
+        `decision recorded ${thread.threadName}: ${claim.subsystem}/${claim.condition} -> ${claim.action}`,
+    );
+    await confirmDecision(result.decision);
+}
+
+/**
  * The single fan-out point. One change event, every registered view re-rendered.
  * No surface talks to another surface. Ever.
  */
@@ -49,7 +75,7 @@ app.listen(ENV.SERVER_PORT, async () => {
     console.log(`server on http://localhost:${ENV.SERVER_PORT}`);
 
     if (ENABLED.slack) {
-        await startSlack(apply).catch((error: Error) =>
+        await startSlack(apply, readThread).catch((error: Error) =>
             console.error("slack failed to start:", error.message),
         );
     }

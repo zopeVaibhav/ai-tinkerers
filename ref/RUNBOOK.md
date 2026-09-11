@@ -93,8 +93,14 @@ terminal (`telegram chat seen: id=...`), and put it in `.env` as
 - `refused approve from <name>: cannot approve own proposal` — get someone else
   to sign off
 
-**Mentioning the bot in Slack does nothing.** Scopes are not enough. The app also
-needs the bot event `app_mention` subscribed under Event Subscriptions.
+**The agent ignores everything in a channel.** Two causes. Either the app is
+missing `channels:history` / `channels:read`, or the bot event `message.channels`
+is not subscribed under Event Subscriptions. Scopes alone are not enough.
+
+**The agent read the thread and recorded nothing.** That is the normal case. It
+only records when someone states what the system should do and the claim fits the
+closed vocabularies in `packages/types/src/enums.ts`. Still discussing means no
+decision.
 
 **Piles of old cards.** Every card from before the last `.state.json` reset is
 dead. Delete them; only the newest is registered.

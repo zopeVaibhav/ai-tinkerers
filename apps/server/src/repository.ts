@@ -59,6 +59,20 @@ export async function candidatesFor(
     return rows.map(toDecision);
 }
 
+/** The live claim a thread currently stands behind, if it has one. */
+export async function decisionForThread(threadKey: string): Promise<Decision | null> {
+    const row = await prisma.decision.findFirst({
+        where: { threadKey, supersededById: null },
+        orderBy: { createdAt: "desc" },
+    });
+    return row ? toDecision(row) : null;
+}
+
+/** A thread changing its mind is a correction, not a conflict. */
+export async function supersede(oldId: string, newId: string): Promise<void> {
+    await prisma.decision.update({ where: { id: oldId }, data: { supersededById: newId } });
+}
+
 export async function listDecisions(): Promise<Decision[]> {
     const rows = await prisma.decision.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
     return rows.map(toDecision);

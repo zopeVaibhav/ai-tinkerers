@@ -92,5 +92,10 @@ Copy `.env.example` to `.env` and fill it in. Each surface stays disabled until
 its credentials are present, so the server boots either way — check
 `GET /health` to see which are live.
 
-Slack needs bot scopes `chat:write` and `app_mentions:read`, Socket Mode on,
-Interactivity on, and the bot event `app_mention` subscribed.
+Slack needs:
+
+- bot scopes `chat:write`, `app_mentions:read`, `channels:history`, `channels:read`
+- Socket Mode on, Interactivity on
+- bot events subscribed: `app_mention` and `message.channels`
+
+The bot only reads threads in channels it has been invited to.

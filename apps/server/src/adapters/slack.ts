@@ -1,9 +1,12 @@
 import { App, LogLevel } from "@slack/bolt";
 import { renderSlack } from "@repo/core";
 import { ActionType, Audience, Side, Surface } from "@repo/types";
-import type { Action, Conflict } from "@repo/types";
+import type { Action, Conflict, Decision } from "@repo/types";
 import { ENV } from "../config/env";
 import { dropView, viewsOf } from "../repository";
+import { onThreadQuiet } from "../threads";
+import type { Message } from "../agent/extract";
+import type { ThreadRef } from "../decisions";
 
 type SlackClient = InstanceType<typeof App>["client"];
 
@@ -22,11 +25,21 @@ type ViewArgs = {
     };
 };
 
-type MentionArgs = {
-    event: { text: string; user?: string };
+type MessageArgs = {
+    event: {
+        channel: string;
+        ts: string;
+        thread_ts?: string;
+        user?: string;
+        text?: string;
+        bot_id?: string;
+        subtype?: string;
+    };
 };
 
 let client: SlackClient | null = null;
+
+const channelNames = new Map<string, string>();
 
 const DIRECT = [ActionType.Acknowledge] as const;
 
@@ -48,6 +61,7 @@ type PromptKey = keyof typeof PROMPTS;
 
 export async function startSlack(
     act: (conflictId: string, action: Action, from: Audience) => Promise<unknown>,
+    onThread: (thread: ThreadRef, messages: Message[], lastSpeaker: string) => Promise<void>,
 ) {
     const app = new App({
         token: ENV.SLACK_BOT_TOKEN,
@@ -84,9 +98,86 @@ export async function startSlack(
         });
     }
 
+    /**
+     * Every message in a channel the bot is in belongs to some thread. The
+     * agent for that thread re-reads it once the typing stops, which is the
+     * only way a decision gets recorded — nobody fills in a form.
+     */
+    app.event("message", async (args: MessageArgs) => {
+        const event = args.event;
+        if (event.bot_id || (event.subtype && event.subtype !== "thread_broadcast")) return;
+        if (!event.text?.trim()) return;
+
+        const rootTs = event.thread_ts ?? event.ts;
+        const threadKey = `${event.channel}:${rootTs}`;
+
+        onThreadQuiet(threadKey, async () => {
+            const messages = await readThread(event.channel, rootTs);
+            if (messages.length === 0) return;
+            const thread: ThreadRef = {
+                surface: Surface.Slack,
+                threadKey,
+                threadName: await channelName(event.channel),
+            };
+            const last = messages[messages.length - 1];
+            await onThread(thread, messages, last?.by ?? Surface.Slack);
+        });
+    });
+
     await app.start();
     client = app.client;
     console.log("slack connected");
+}
+
+/** Small and quiet. The loud moment belongs to the conflict card. */
+export async function confirmDecision(decision: Decision) {
+    if (!client) return;
+    const [channel, ts] = decision.threadKey.split(":");
+    if (!channel || !ts) return;
+
+    await client.chat.postMessage({
+        channel,
+        thread_ts: ts,
+        text: `Recorded: ${decision.subsystem} · on ${decision.condition} · ${decision.action}`,
+        blocks: [
+            {
+                type: "context",
+                elements: [
+                    {
+                        type: "mrkdwn",
+                        text: `Recorded · *${decision.subsystem}* on \`${decision.condition}\` → \`${decision.action}\``,
+                    },
+                ],
+            },
+        ],
+    });
+}
+
+async function readThread(channel: string, ts: string): Promise<Message[]> {
+    if (!client) return [];
+    try {
+        const replies = await client.conversations.replies({ channel, ts, limit: 50 });
+        return (replies.messages ?? [])
+            .filter((message) => !message.bot_id && message.text?.trim())
+            .map((message) => ({ by: message.user ?? "someone", text: message.text ?? "" }));
+    } catch (error) {
+        console.error("could not read thread:", (error as Error).message);
+        return [];
+    }
+}
+
+async function channelName(channel: string): Promise<string> {
+    const cached = channelNames.get(channel);
+    if (cached) return cached;
+    if (!client) return channel;
+    try {
+        const info = await client.conversations.info({ channel });
+        const name = info.channel?.name ? `#${info.channel.name}` : channel;
+        channelNames.set(channel, name);
+        return name;
+    } catch {
+        return channel;
+    }
 }
 
 export async function updateSlack(conflict: Conflict) {
