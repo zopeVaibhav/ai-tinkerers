@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { renderWeb } from "@repo/core";
-import { Surface } from "@repo/types";
+import { Audience, Surface } from "@repo/types";
 import type { SharedObject } from "@repo/types";
 import { subscribe, unsubscribe } from "../subscriptions";
 
@@ -22,7 +22,7 @@ export function openStream(req: Request, res: Response, objectId: string, initia
     });
 
     connections.set(id, { id, res, objectId });
-    subscribe(objectId, { surface: Surface.Web, connectionId: id });
+    subscribe(objectId, { surface: Surface.Web, audience: Audience.Lead, connectionId: id });
     write(res, initial);
 
     req.on("close", () => {

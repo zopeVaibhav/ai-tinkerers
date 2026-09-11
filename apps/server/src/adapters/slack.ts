@@ -1,6 +1,6 @@
 import { App, LogLevel } from "@slack/bolt";
 import { renderSlack } from "@repo/core";
-import { ActionType, Surface } from "@repo/types";
+import { ActionType, Audience, Surface } from "@repo/types";
 import type { Action, SharedObject } from "@repo/types";
 import { ENV } from "../config/env";
 import { subscribe, unsubscribe, viewsOf } from "../subscriptions";
@@ -11,6 +11,10 @@ type ActionArgs = {
     ack: () => Promise<void>;
     body: { user?: { username?: string; name?: string }; trigger_id?: string };
     client: SlackClient;
+};
+
+type MentionArgs = {
+    event: { text: string; user?: string };
 };
 
 type ViewArgs = {
@@ -39,7 +43,8 @@ type PromptKey = keyof typeof PROMPTS;
 export async function startSlack(
     objectId: string,
     initial: SharedObject,
-    dispatch: (action: Action) => void,
+    dispatch: (action: Action, from: Audience) => void,
+    onReport: (text: string, by: string) => Promise<Action | null>,
 ) {
     const app = new App({
         token: ENV.SLACK_BOT_TOKEN,
@@ -51,7 +56,7 @@ export async function startSlack(
     for (const type of DIRECT) {
         app.action(type, async (args: ActionArgs) => {
             await args.ack();
-            dispatch({ type, by: who(args.body) });
+            dispatch({ type, by: who(args.body) }, Audience.Lead);
         });
     }
 
@@ -69,9 +74,16 @@ export async function startSlack(
             await args.ack();
             const value = args.view.state.values.field?.value?.value?.trim();
             if (!value) return;
-            dispatch(toAction(key, who(args.body), value));
+            dispatch(toAction(key, who(args.body), value), Audience.Lead);
         });
     }
+
+    app.event("app_mention", async (args: MentionArgs) => {
+        const text = args.event.text.replace(/<@[^>]+>/g, "").trim();
+        if (!text) return;
+        const action = await onReport(text, args.event.user ?? Surface.Slack);
+        if (action) dispatch(action, Audience.Lead);
+    });
 
     await app.start();
     client = app.client;
@@ -102,6 +114,7 @@ export async function startSlack(
     if (posted.ts) {
         subscribe(objectId, {
             surface: Surface.Slack,
+            audience: Audience.Lead,
             channel: ENV.SLACK_CHANNEL_ID,
             ts: posted.ts,
         });

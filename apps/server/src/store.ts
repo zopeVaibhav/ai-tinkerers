@@ -1,4 +1,5 @@
-import { createObject, isValid, reduce } from "@repo/core";
+import { can, createObject, isSelfApproval, isValid, reduce } from "@repo/core";
+import { Audience } from "@repo/types";
 import type { Action, SharedObject } from "@repo/types";
 
 type Listener = (object: SharedObject) => void;
@@ -19,8 +20,18 @@ export function getObject(id: string): SharedObject {
  * The only write path. Every surface and the agent go through here.
  * Applying an action fires one change event; fan-out happens in the caller.
  */
-export function apply(id: string, action: Action): SharedObject {
+export function apply(id: string, action: Action, from = Audience.Lead): SharedObject {
     const current = getObject(id);
+
+    if (!can(from, action.type)) {
+        console.log(`refused ${action.type} from ${from}: not allowed on that surface`);
+        return current;
+    }
+
+    if (isSelfApproval(current, action)) {
+        console.log(`refused ${action.type} from ${action.by}: cannot approve own proposal`);
+        return current;
+    }
 
     // A tap against a state that has already moved on changes nothing.
     if (!isValid(current, action)) {

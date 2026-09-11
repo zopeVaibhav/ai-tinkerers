@@ -27,7 +27,7 @@ app.get("/stream", (req, res) => {
 });
 
 app.post("/action", (req, res) => {
-    res.json(dispatch(req.body as Action));
+    res.json(dispatch(req.body as Action, Audience.Lead));
 });
 
 app.post("/reset", (_req, res) => {
@@ -42,14 +42,20 @@ app.post("/report", async (req, res) => {
 
     const action = await intake(text, from ?? Audience.Customer);
     if (!action) return res.status(502).json({ error: "agent could not read that message" });
-    return res.json(dispatch(action));
+    return res.json(dispatch(action, Audience.Lead));
 });
 
 /** The single write path. Every surface and the agent come through here. */
-function dispatch(action: Action) {
-    const object = apply(OBJECT_ID, action);
+function dispatch(action: Action, from: Audience) {
+    const object = apply(OBJECT_ID, action, from);
     if (shouldReframe(action)) void rewrite();
     return object;
+}
+
+/** Raw text from any surface becomes facts, or nothing if the agent is off. */
+async function report(text: string, by: string): Promise<Action | null> {
+    if (!ENABLED.agent) return null;
+    return intake(text, by);
 }
 
 /**
@@ -88,14 +94,14 @@ app.listen(ENV.SERVER_PORT, async () => {
     console.log(`server on http://localhost:${ENV.SERVER_PORT}`);
 
     if (ENABLED.slack) {
-        await startSlack(OBJECT_ID, getObject(OBJECT_ID), dispatch).catch((error: Error) =>
+        await startSlack(OBJECT_ID, getObject(OBJECT_ID), dispatch, report).catch((error: Error) =>
             console.error("slack failed to start:", error.message),
         );
     }
 
     if (ENABLED.telegram) {
-        await startTelegram(OBJECT_ID, getObject(OBJECT_ID), dispatch).catch((error: Error) =>
-            console.error("telegram failed to start:", error.message),
+        await startTelegram(OBJECT_ID, getObject(OBJECT_ID), dispatch, report).catch(
+            (error: Error) => console.error("telegram failed to start:", error.message),
         );
     }
 

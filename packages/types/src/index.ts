@@ -8,9 +8,9 @@ export { ActionType, Audience, Severity, Status, Surface };
  * forward messages between platforms, we re-render every registered view.
  */
 export type ViewRef =
-    | { surface: Surface.Slack; channel: string; ts: string }
-    | { surface: Surface.Telegram; chatId: number; messageId: number }
-    | { surface: Surface.Web; connectionId: string };
+    | { surface: Surface.Slack; audience: Audience; channel: string; ts: string }
+    | { surface: Surface.Telegram; audience: Audience; chatId: number; messageId: number }
+    | { surface: Surface.Web; audience: Audience; connectionId: string };
 
 export type TimelineEntry = {
     at: string;
