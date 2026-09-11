@@ -1,3 +1,4 @@
+import { ActionType, Status } from "@repo/types";
 import type { Action, SharedObject } from "@repo/types";
 
 type Facts = SharedObject["facts"];
@@ -9,7 +10,9 @@ type Facts = SharedObject["facts"];
 export function reduce(state: SharedObject, action: Action): SharedObject {
     const facts = nextFacts(state.facts, action);
     const framings =
-        action.type === "reframe" ? { ...state.framings, ...action.framings } : state.framings;
+        action.type === ActionType.Reframe
+            ? { ...state.framings, ...action.framings }
+            : state.framings;
 
     return {
         ...state,
@@ -25,47 +28,47 @@ export function reduce(state: SharedObject, action: Action): SharedObject {
 
 function nextFacts(facts: Facts, action: Action): Facts {
     switch (action.type) {
-        case "intake":
+        case ActionType.Intake:
             return {
                 ...facts,
                 what: action.what,
                 severity: action.severity,
                 affected: action.affected,
-                status: "triage",
+                status: Status.Triage,
             };
-        case "acknowledge":
+        case ActionType.Acknowledge:
             return { ...facts, acknowledgedBy: action.by };
-        case "propose":
-            return { ...facts, proposedFix: action.fix, status: "awaiting_approval" };
-        case "approve":
-            return { ...facts, approvedBy: action.by, status: "approved" };
-        case "reject":
-            return { ...facts, proposedFix: null, approvedBy: null, status: "triage" };
-        case "resolve":
-            return { ...facts, status: "resolved" };
-        case "note":
-        case "reframe":
+        case ActionType.Propose:
+            return { ...facts, proposedFix: action.fix, status: Status.AwaitingApproval };
+        case ActionType.Approve:
+            return { ...facts, approvedBy: action.by, status: Status.Approved };
+        case ActionType.Reject:
+            return { ...facts, proposedFix: null, approvedBy: null, status: Status.Triage };
+        case ActionType.Resolve:
+            return { ...facts, status: Status.Resolved };
+        case ActionType.Note:
+        case ActionType.Reframe:
             return facts;
     }
 }
 
 function describe(action: Action): string {
     switch (action.type) {
-        case "intake":
+        case ActionType.Intake:
             return `reported: ${action.what}`;
-        case "acknowledge":
+        case ActionType.Acknowledge:
             return "took ownership";
-        case "propose":
+        case ActionType.Propose:
             return `proposed: ${action.fix}`;
-        case "approve":
+        case ActionType.Approve:
             return "approved the fix";
-        case "reject":
+        case ActionType.Reject:
             return `rejected: ${action.reason}`;
-        case "resolve":
+        case ActionType.Resolve:
             return "marked resolved";
-        case "note":
+        case ActionType.Note:
             return action.text;
-        case "reframe":
+        case ActionType.Reframe:
             return "rewrote the summaries";
     }
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ActionType, Audience, Severity } from "@repo/types";
 import type { Action, SharedObject } from "@repo/types";
 import { ask } from "./client";
 
@@ -8,7 +9,7 @@ import { ask } from "./client";
  */
 const intakeSchema = z.object({
     what: z.string().min(1),
-    severity: z.enum(["low", "medium", "high"]),
+    severity: z.enum(Severity),
     affected: z.number().int().min(0),
 });
 
@@ -27,7 +28,7 @@ export async function intake(raw: string, from: string): Promise<Action | null> 
     );
 
     if (!result) return null;
-    return { type: "intake", by: from, ...result };
+    return { type: ActionType.Intake, by: from, ...result };
 }
 
 /**
@@ -36,9 +37,9 @@ export async function intake(raw: string, from: string): Promise<Action | null> 
  * shows the same blob of text, which defeats being on three surfaces at all.
  */
 const framingSchema = z.object({
-    engineer: z.string().min(1),
-    lead: z.string().min(1),
-    customer: z.string().min(1),
+    [Audience.Engineer]: z.string().min(1),
+    [Audience.Lead]: z.string().min(1),
+    [Audience.Customer]: z.string().min(1),
 });
 
 export async function reframe(object: SharedObject): Promise<Action | null> {
@@ -56,5 +57,5 @@ export async function reframe(object: SharedObject): Promise<Action | null> {
     );
 
     if (!result) return null;
-    return { type: "reframe", by: "agent", framings: result };
+    return { type: ActionType.Reframe, by: "agent", framings: result };
 }

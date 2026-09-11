@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { Surface } from "@repo/types";
 import type { SharedObject, ViewRef } from "@repo/types";
 import { restoreObjects, snapshotObjects } from "./store";
 import { restoreViews, snapshotViews } from "./subscriptions";
@@ -34,7 +35,7 @@ export function save(): void {
     const views = Object.fromEntries(
         Object.entries(snapshotViews()).map(([id, list]) => [
             id,
-            list.filter((view) => view.surface !== "web"),
+            list.filter((view) => view.surface !== Surface.Web),
         ]),
     );
     writeFileSync(

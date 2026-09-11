@@ -1,6 +1,6 @@
-export type Surface = "slack" | "telegram" | "web";
+import { ActionType, Audience, Severity, Status, Surface } from "./enums";
 
-export type Audience = "engineer" | "lead" | "customer";
+export { ActionType, Audience, Severity, Status, Surface };
 
 /**
  * A live window onto one shared object. The subscription table maps
@@ -8,19 +8,15 @@ export type Audience = "engineer" | "lead" | "customer";
  * forward messages between platforms, we re-render every registered view.
  */
 export type ViewRef =
-    | { surface: "slack"; channel: string; ts: string }
-    | { surface: "telegram"; chatId: number; messageId: number }
-    | { surface: "web"; connectionId: string };
+    | { surface: Surface.Slack; channel: string; ts: string }
+    | { surface: Surface.Telegram; chatId: number; messageId: number }
+    | { surface: Surface.Web; connectionId: string };
 
 export type TimelineEntry = {
     at: string;
     by: string;
     what: string;
 };
-
-export type Severity = "low" | "medium" | "high";
-
-export type Status = "triage" | "awaiting_approval" | "approved" | "resolved";
 
 /**
  * The single source of truth. Every surface renders this and nothing else.
@@ -50,11 +46,11 @@ export type SharedObject = {
  * before it touches the store. Nothing downstream knows which app it came from.
  */
 export type Action =
-    | { type: "intake"; by: string; what: string; severity: Severity; affected: number }
-    | { type: "acknowledge"; by: string }
-    | { type: "propose"; by: string; fix: string }
-    | { type: "approve"; by: string }
-    | { type: "reject"; by: string; reason: string }
-    | { type: "resolve"; by: string }
-    | { type: "note"; by: string; text: string }
-    | { type: "reframe"; by: string; framings: Partial<Record<Audience, string>> };
+    | { type: ActionType.Intake; by: string; what: string; severity: Severity; affected: number }
+    | { type: ActionType.Acknowledge; by: string }
+    | { type: ActionType.Propose; by: string; fix: string }
+    | { type: ActionType.Approve; by: string }
+    | { type: ActionType.Reject; by: string; reason: string }
+    | { type: ActionType.Resolve; by: string }
+    | { type: ActionType.Note; by: string; text: string }
+    | { type: ActionType.Reframe; by: string; framings: Partial<Record<Audience, string>> };

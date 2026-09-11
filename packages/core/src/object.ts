@@ -1,3 +1,4 @@
+import { Severity, Status } from "@repo/types";
 import type { SharedObject } from "@repo/types";
 
 export function createObject(id: string): SharedObject {
@@ -6,12 +7,12 @@ export function createObject(id: string): SharedObject {
         version: 0,
         facts: {
             what: "Nothing reported yet",
-            severity: "low",
+            severity: Severity.Low,
             affected: 0,
             acknowledgedBy: null,
             proposedFix: null,
             approvedBy: null,
-            status: "triage",
+            status: Status.Triage,
         },
         framings: {},
         timeline: [],

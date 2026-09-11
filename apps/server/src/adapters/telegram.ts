@@ -1,5 +1,6 @@
 import { Bot } from "grammy";
 import { renderTelegram } from "@repo/core";
+import { ActionType, Surface } from "@repo/types";
 import type { Action, SharedObject } from "@repo/types";
 import { ENV } from "../config/env";
 import { subscribe, unsubscribe, viewsOf } from "../subscriptions";
@@ -23,7 +24,7 @@ export async function startTelegram(
 
     instance.on("callback_query:data", async (ctx) => {
         await ctx.answerCallbackQuery();
-        const by = ctx.from?.first_name ?? "telegram";
+        const by = ctx.from?.first_name ?? Surface.Telegram;
         const action = toAction(ctx.callbackQuery.data, by);
         if (action) dispatch(action);
     });
@@ -35,8 +36,8 @@ export async function startTelegram(
     const chatId = Number(ENV.TELEGRAM_CHAT_ID);
     const payload = renderTelegram(initial);
 
-    const existing = viewsOf(objectId).find((view) => view.surface === "telegram");
-    if (existing && existing.surface === "telegram") {
+    const existing = viewsOf(objectId).find((view) => view.surface === Surface.Telegram);
+    if (existing && existing.surface === Surface.Telegram) {
         try {
             await instance.api.editMessageText(existing.chatId, existing.messageId, payload.text, {
                 reply_markup: payload.reply_markup,
@@ -49,7 +50,7 @@ export async function startTelegram(
                 console.log(`telegram view reattached message_id=${existing.messageId}`);
                 return;
             }
-            unsubscribe(objectId, (view) => view.surface === "telegram");
+            unsubscribe(objectId, (view) => view.surface === Surface.Telegram);
         }
     }
 
@@ -57,14 +58,14 @@ export async function startTelegram(
         reply_markup: payload.reply_markup,
     });
 
-    subscribe(objectId, { surface: "telegram", chatId, messageId: sent.message_id });
+    subscribe(objectId, { surface: Surface.Telegram, chatId, messageId: sent.message_id });
     console.log(`telegram view registered message_id=${sent.message_id}`);
 }
 
 export async function updateTelegram(object: SharedObject) {
     if (!bot) return;
     for (const view of viewsOf(object.id)) {
-        if (view.surface !== "telegram") continue;
+        if (view.surface !== Surface.Telegram) continue;
         const payload = renderTelegram(object);
         try {
             await bot.api.editMessageText(view.chatId, view.messageId, payload.text, {
@@ -93,14 +94,14 @@ export async function updateTelegram(object: SharedObject) {
  */
 function toAction(data: string, by: string): Action | null {
     switch (data) {
-        case "acknowledge":
-            return { type: "acknowledge", by };
-        case "approve":
-            return { type: "approve", by };
-        case "resolve":
-            return { type: "resolve", by };
-        case "reject":
-            return { type: "reject", by, reason: "rejected from mobile" };
+        case ActionType.Acknowledge:
+            return { type: ActionType.Acknowledge, by };
+        case ActionType.Approve:
+            return { type: ActionType.Approve, by };
+        case ActionType.Resolve:
+            return { type: ActionType.Resolve, by };
+        case ActionType.Reject:
+            return { type: ActionType.Reject, by, reason: "rejected from mobile" };
         default:
             return null;
     }

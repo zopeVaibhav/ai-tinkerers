@@ -1,5 +1,6 @@
 import { App, LogLevel } from "@slack/bolt";
 import { renderSlack } from "@repo/core";
+import { ActionType, Surface } from "@repo/types";
 import type { Action, SharedObject } from "@repo/types";
 import { ENV } from "../config/env";
 import { subscribe, unsubscribe, viewsOf } from "../subscriptions";
@@ -21,16 +22,16 @@ type ViewArgs = {
 let client: SlackClient | null = null;
 
 /** Buttons that change state directly, with nothing to type. */
-const DIRECT = ["acknowledge", "approve", "resolve"] as const;
+const DIRECT = [ActionType.Acknowledge, ActionType.Approve, ActionType.Resolve] as const;
 
 /**
  * Buttons that need typed input. Slack rejects input blocks in posted messages,
  * so the only way to collect text is button -> views.open -> view_submission.
  */
 const PROMPTS = {
-    propose: { title: "Propose a fix", submit: "Propose", label: "What is the fix?" },
-    reject: { title: "Reject the fix", submit: "Reject", label: "Why?" },
-    note: { title: "Add a note", submit: "Add", label: "Note" },
+    [ActionType.Propose]: { title: "Propose a fix", submit: "Propose", label: "What is the fix?" },
+    [ActionType.Reject]: { title: "Reject the fix", submit: "Reject", label: "Why?" },
+    [ActionType.Note]: { title: "Add a note", submit: "Add", label: "Note" },
 } as const;
 
 type PromptKey = keyof typeof PROMPTS;
@@ -76,8 +77,8 @@ export async function startSlack(
     client = app.client;
 
     // Reattach to a view we already own rather than posting a second card.
-    const existing = viewsOf(objectId).find((view) => view.surface === "slack");
-    if (existing && existing.surface === "slack") {
+    const existing = viewsOf(objectId).find((view) => view.surface === Surface.Slack);
+    if (existing && existing.surface === Surface.Slack) {
         try {
             await app.client.chat.update({
                 channel: existing.channel,
@@ -88,7 +89,7 @@ export async function startSlack(
             console.log(`slack view reattached ts=${existing.ts}`);
             return;
         } catch {
-            unsubscribe(objectId, (view) => view.surface === "slack");
+            unsubscribe(objectId, (view) => view.surface === Surface.Slack);
         }
     }
 
@@ -99,7 +100,11 @@ export async function startSlack(
     });
 
     if (posted.ts) {
-        subscribe(objectId, { surface: "slack", channel: ENV.SLACK_CHANNEL_ID, ts: posted.ts });
+        subscribe(objectId, {
+            surface: Surface.Slack,
+            channel: ENV.SLACK_CHANNEL_ID,
+            ts: posted.ts,
+        });
         console.log(`slack view registered ts=${posted.ts}`);
     }
 }
@@ -107,7 +112,7 @@ export async function startSlack(
 export async function updateSlack(object: SharedObject) {
     if (!client) return;
     for (const view of viewsOf(object.id)) {
-        if (view.surface !== "slack") continue;
+        if (view.surface !== Surface.Slack) continue;
         try {
             await client.chat.update({
                 channel: view.channel,
@@ -129,9 +134,9 @@ export async function updateSlack(object: SharedObject) {
 }
 
 function toAction(key: PromptKey, by: string, value: string): Action {
-    if (key === "propose") return { type: "propose", by, fix: value };
-    if (key === "reject") return { type: "reject", by, reason: value };
-    return { type: "note", by, text: value };
+    if (key === ActionType.Propose) return { type: ActionType.Propose, by, fix: value };
+    if (key === ActionType.Reject) return { type: ActionType.Reject, by, reason: value };
+    return { type: ActionType.Note, by, text: value };
 }
 
 function modal(key: PromptKey) {
@@ -154,7 +159,7 @@ function modal(key: PromptKey) {
 }
 
 function who(body: { user?: { username?: string; name?: string } }): string {
-    return body.user?.username ?? body.user?.name ?? "slack";
+    return body.user?.username ?? body.user?.name ?? Surface.Slack;
 }
 
 function summary(object: SharedObject): string {

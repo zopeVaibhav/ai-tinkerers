@@ -1,25 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Action, SharedObject, Severity } from "@repo/types";
+import { ActionType, Audience, Severity, Status, Surface } from "@repo/types";
+import type { Action, SharedObject } from "@repo/types";
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:5101";
 
 /** Omit distributes over the union, so each variant keeps its own fields. */
 type Draft<T> = T extends unknown ? Omit<T, "by"> : never;
 
-const STATUS_LABEL: Record<SharedObject["facts"]["status"], string> = {
-    triage: "Triage",
-    awaiting_approval: "Waiting for approval",
-    approved: "Approved",
-    resolved: "Resolved",
+const STATUS_LABEL: Record<Status, string> = {
+    [Status.Triage]: "Triage",
+    [Status.AwaitingApproval]: "Waiting for approval",
+    [Status.Approved]: "Approved",
+    [Status.Resolved]: "Resolved",
 };
 
 export default function Page() {
     const [object, setObject] = useState<SharedObject | null>(null);
     const [name, setName] = useState("");
     const [what, setWhat] = useState("");
-    const [severity, setSeverity] = useState<Severity>("low");
+    const [severity, setSeverity] = useState<Severity>(Severity.Low);
     const [affected, setAffected] = useState(0);
     const [fix, setFix] = useState("");
     const [note, setNote] = useState("");
@@ -28,7 +29,7 @@ export default function Page() {
     const seeded = useRef(false);
 
     useEffect(() => {
-        setName(localStorage.getItem("name") ?? "web");
+        setName(localStorage.getItem("name") ?? Surface.Web);
         const source = new EventSource(`${SERVER}/stream`);
         source.onmessage = (event) => {
             const next = JSON.parse(event.data) as SharedObject;
@@ -55,7 +56,7 @@ export default function Page() {
             await fetch(`${SERVER}/report`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text: report, from: "customer" }),
+                body: JSON.stringify({ text: report, from: Audience.Customer }),
             });
             setReport("");
         } finally {
@@ -67,7 +68,7 @@ export default function Page() {
         await fetch(`${SERVER}/action`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...action, by: name || "web" }),
+            body: JSON.stringify({ ...action, by: name || Surface.Web }),
         });
     }
 
@@ -132,9 +133,11 @@ export default function Page() {
                                 onChange={(event) => setSeverity(event.target.value as Severity)}
                                 className="rounded-lg border border-neutral-300 px-3 py-2"
                             >
-                                <option value="low">low</option>
-                                <option value="medium">medium</option>
-                                <option value="high">high</option>
+                                {Object.values(Severity).map((level) => (
+                                    <option key={level} value={level}>
+                                        {level}
+                                    </option>
+                                ))}
                             </select>
                             <input
                                 type="number"
@@ -144,7 +147,9 @@ export default function Page() {
                             />
                             <span className="text-sm text-neutral-500">users affected</span>
                             <button
-                                onClick={() => send({ type: "intake", what, severity, affected })}
+                                onClick={() =>
+                                    send({ type: ActionType.Intake, what, severity, affected })
+                                }
                                 className="ml-auto rounded-lg bg-neutral-900 px-4 py-2 text-sm text-white"
                             >
                                 Update situation
@@ -165,7 +170,7 @@ export default function Page() {
                                     className="flex-1 rounded-lg border border-neutral-300 px-3 py-2"
                                 />
                                 <button
-                                    onClick={() => fix && send({ type: "propose", fix })}
+                                    onClick={() => fix && send({ type: ActionType.Propose, fix })}
                                     className="rounded-lg bg-neutral-900 px-4 py-2 text-sm text-white"
                                 >
                                     Propose
@@ -174,23 +179,32 @@ export default function Page() {
                         )}
 
                         <div className="flex flex-wrap gap-2 pt-1">
-                            {facts.status === "triage" && !facts.acknowledgedBy && (
-                                <Btn onClick={() => send({ type: "acknowledge" })}>Take it</Btn>
+                            {facts.status === Status.Triage && !facts.acknowledgedBy && (
+                                <Btn onClick={() => send({ type: ActionType.Acknowledge })}>
+                                    Take it
+                                </Btn>
                             )}
-                            {facts.status === "awaiting_approval" && (
+                            {facts.status === Status.AwaitingApproval && (
                                 <>
-                                    <Btn onClick={() => send({ type: "approve" })}>Approve</Btn>
+                                    <Btn onClick={() => send({ type: ActionType.Approve })}>
+                                        Approve
+                                    </Btn>
                                     <Btn
                                         onClick={() =>
-                                            send({ type: "reject", reason: "rejected on web" })
+                                            send({
+                                                type: ActionType.Reject,
+                                                reason: "rejected on web",
+                                            })
                                         }
                                     >
                                         Reject
                                     </Btn>
                                 </>
                             )}
-                            {facts.status === "approved" && (
-                                <Btn onClick={() => send({ type: "resolve" })}>Resolve</Btn>
+                            {facts.status === Status.Approved && (
+                                <Btn onClick={() => send({ type: ActionType.Resolve })}>
+                                    Resolve
+                                </Btn>
                             )}
                         </div>
                     </section>
@@ -201,7 +215,7 @@ export default function Page() {
                                 Same facts, three readers
                             </h2>
                             <div className="grid gap-3 sm:grid-cols-3">
-                                {(["engineer", "lead", "customer"] as const).map((audience) => (
+                                {Object.values(Audience).map((audience) => (
                                     <div key={audience} className="flex flex-col gap-1">
                                         <span className="text-xs uppercase tracking-wide text-neutral-400">
                                             {audience}
@@ -240,7 +254,7 @@ export default function Page() {
                             <button
                                 onClick={() => {
                                     if (!note) return;
-                                    void send({ type: "note", text: note });
+                                    void send({ type: ActionType.Note, text: note });
                                     setNote("");
                                 }}
                                 className="rounded-lg border border-neutral-300 px-4 py-2 text-sm"

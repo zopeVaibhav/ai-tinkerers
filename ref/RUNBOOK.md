@@ -40,19 +40,19 @@ Any `false` means that surface's credentials are missing from `.env`.
 3. Open the Telegram group. Scroll to the bot's message.
 4. Reset to a clean state:
 
-   ```bash
-   curl -X POST http://localhost:5101/reset
-   ```
+    ```bash
+    curl -X POST http://localhost:5101/reset
+    ```
 
-   All three go back to "Nothing reported yet". They change **in place** — they
-   do not bump to the bottom and do not notify. Keep them on screen.
+    All three go back to "Nothing reported yet". They change **in place** — they
+    do not bump to the bottom and do not notify. Keep them on screen.
 
 5. On the web page, paste a messy customer message into **Inbound customer
    message** and hit **Hand to agent**. Takes a few seconds.
 6. Check all three now say different things:
-   - Telegram — a decision, terse, for a phone
-   - Slack — status, owner, what is blocked
-   - Web — all three framings side by side
+    - Telegram — a decision, terse, for a phone
+    - Slack — status, owner, what is blocked
+    - Web — all three framings side by side
 7. In Slack click **Take it**, then **Propose fix**, type something, submit.
 8. On your phone, tap **Approve**. Slack and web both flip to Approved.
 9. Click **Resolve** anywhere. All three finish.

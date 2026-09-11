@@ -1,3 +1,4 @@
+import { ActionType, Status } from "@repo/types";
 import type { Action, SharedObject } from "@repo/types";
 
 /**
@@ -13,19 +14,19 @@ export function isValid(state: SharedObject, action: Action): boolean {
     const { status, acknowledgedBy } = state.facts;
 
     switch (action.type) {
-        case "intake":
-            return status !== "resolved";
-        case "acknowledge":
+        case ActionType.Intake:
+            return status !== Status.Resolved;
+        case ActionType.Acknowledge:
             return !acknowledgedBy;
-        case "propose":
-            return status === "triage";
-        case "approve":
-        case "reject":
-            return status === "awaiting_approval";
-        case "resolve":
-            return status === "approved";
-        case "note":
-        case "reframe":
+        case ActionType.Propose:
+            return status === Status.Triage;
+        case ActionType.Approve:
+        case ActionType.Reject:
+            return status === Status.AwaitingApproval;
+        case ActionType.Resolve:
+            return status === Status.Approved;
+        case ActionType.Note:
+        case ActionType.Reframe:
             return true;
     }
 }

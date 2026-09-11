@@ -1,10 +1,11 @@
+import { ActionType, Audience, Status } from "@repo/types";
 import type { SharedObject } from "@repo/types";
+
+export type TelegramButton = { text: string; callback_data: ActionType };
 
 export type TelegramPayload = {
     text: string;
-    reply_markup: {
-        inline_keyboard: { text: string; callback_data: string }[][];
-    };
+    reply_markup: { inline_keyboard: TelegramButton[][] };
 };
 
 /**
@@ -18,38 +19,39 @@ export function renderTelegram(object: SharedObject): TelegramPayload {
     const { facts, framings } = object;
 
     const lines = [
-        framings.engineer ?? facts.what,
+        framings[Audience.Engineer] ?? facts.what,
         "",
         `${facts.severity.toUpperCase()} · ${facts.affected} users affected`,
     ];
 
-    if (facts.status === "awaiting_approval" && facts.proposedFix) {
+    if (facts.status === Status.AwaitingApproval && facts.proposedFix) {
         lines.push("", `Proposed: ${facts.proposedFix}`);
     }
 
-    if (facts.status === "approved") lines.push("", "Approved. Fix going out.");
-    if (facts.status === "resolved") lines.push("", "Resolved.");
+    if (facts.status === Status.Approved) lines.push("", "Approved. Fix going out.");
+    if (facts.status === Status.Resolved) lines.push("", "Resolved.");
 
     return { text: lines.join("\n"), reply_markup: { inline_keyboard: keyboard(object) } };
 }
 
-function keyboard(object: SharedObject): { text: string; callback_data: string }[][] {
+function keyboard(object: SharedObject): TelegramButton[][] {
     const { status, acknowledgedBy } = object.facts;
 
-    if (status === "triage") {
-        return acknowledgedBy ? [] : [[{ text: "Take it", callback_data: "acknowledge" }]];
+    if (status === Status.Triage) {
+        return acknowledgedBy ? [] : [[{ text: "Take it", callback_data: ActionType.Acknowledge }]];
     }
 
-    if (status === "awaiting_approval") {
+    if (status === Status.AwaitingApproval) {
         return [
             [
-                { text: "Approve", callback_data: "approve" },
-                { text: "Reject", callback_data: "reject" },
+                { text: "Approve", callback_data: ActionType.Approve },
+                { text: "Reject", callback_data: ActionType.Reject },
             ],
         ];
     }
 
-    if (status === "approved") return [[{ text: "Resolve", callback_data: "resolve" }]];
+    if (status === Status.Approved)
+        return [[{ text: "Resolve", callback_data: ActionType.Resolve }]];
 
     return [];
 }

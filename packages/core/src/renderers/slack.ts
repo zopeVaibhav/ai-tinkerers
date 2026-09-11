@@ -1,3 +1,4 @@
+import { ActionType, Audience, Status } from "@repo/types";
 import type { SharedObject } from "@repo/types";
 
 /**
@@ -20,14 +21,14 @@ export function renderSlack(object: SharedObject): unknown[] {
         },
         {
             type: "section",
-            text: { type: "mrkdwn", text: framings.lead ?? facts.what },
+            text: { type: "mrkdwn", text: framings[Audience.Lead] ?? facts.what },
         },
         {
             type: "section",
             fields: [
                 { type: "mrkdwn", text: `*Severity*\n${facts.severity.toUpperCase()}` },
                 { type: "mrkdwn", text: `*Users affected*\n${facts.affected}` },
-                { type: "mrkdwn", text: `*Status*\n${label(facts.status)}` },
+                { type: "mrkdwn", text: `*Status*\n${STATUS_LABEL[facts.status]}` },
                 { type: "mrkdwn", text: `*Owner*\n${facts.acknowledgedBy ?? "unassigned"}` },
             ],
         },
@@ -57,41 +58,41 @@ export function renderSlack(object: SharedObject): unknown[] {
     return blocks;
 }
 
+const STATUS_LABEL: Record<Status, string> = {
+    [Status.Triage]: "Triage",
+    [Status.AwaitingApproval]: "Waiting for approval",
+    [Status.Approved]: "Approved",
+    [Status.Resolved]: "Resolved",
+};
+
 function actionsFor(object: SharedObject): unknown[] {
-    const { status } = object.facts;
+    const { status, acknowledgedBy } = object.facts;
     const buttons: unknown[] = [];
 
-    if (status === "triage") {
-        if (!object.facts.acknowledgedBy) buttons.push(button("acknowledge", "Take it", "primary"));
-        buttons.push(button("propose", "Propose fix"));
+    if (status === Status.Triage) {
+        if (!acknowledgedBy) buttons.push(button(ActionType.Acknowledge, "Take it", "primary"));
+        buttons.push(button(ActionType.Propose, "Propose fix"));
     }
 
-    if (status === "awaiting_approval") {
-        buttons.push(button("approve", "Approve", "primary"));
-        buttons.push(button("reject", "Reject", "danger"));
+    if (status === Status.AwaitingApproval) {
+        buttons.push(button(ActionType.Approve, "Approve", "primary"));
+        buttons.push(button(ActionType.Reject, "Reject", "danger"));
     }
 
-    if (status === "approved") buttons.push(button("resolve", "Resolve", "primary"));
+    if (status === Status.Approved) buttons.push(button(ActionType.Resolve, "Resolve", "primary"));
 
-    if (status !== "resolved") buttons.push(button("note", "Add note"));
+    if (status !== Status.Resolved) buttons.push(button(ActionType.Note, "Add note"));
 
     return buttons;
 }
 
-function button(actionId: string, text: string, style?: "primary" | "danger") {
+function button(actionId: ActionType, text: string, style?: "primary" | "danger") {
     return {
         type: "button",
         action_id: actionId,
         text: { type: "plain_text", text },
         ...(style ? { style } : {}),
     };
-}
-
-function label(status: SharedObject["facts"]["status"]): string {
-    if (status === "awaiting_approval") return "Waiting for approval";
-    if (status === "triage") return "Triage";
-    if (status === "approved") return "Approved";
-    return "Resolved";
 }
 
 function recent(timeline: SharedObject["timeline"]): string {

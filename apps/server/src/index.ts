@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import { ActionType, Audience } from "@repo/types";
 import type { Action } from "@repo/types";
 import { ENABLED, ENV } from "./config/env";
 import { apply, getObject, onChange, reset } from "./store";
@@ -39,7 +40,7 @@ app.post("/report", async (req, res) => {
     if (!text?.trim()) return res.status(400).json({ error: "text is required" });
     if (!ENABLED.agent) return res.status(503).json({ error: "agent is not configured" });
 
-    const action = await intake(text, from ?? "customer");
+    const action = await intake(text, from ?? Audience.Customer);
     if (!action) return res.status(502).json({ error: "agent could not read that message" });
     return res.json(dispatch(action));
 });
@@ -56,7 +57,7 @@ function dispatch(action: Action) {
  * whenever the facts move — and never in response to its own writes.
  */
 function shouldReframe(action: Action): boolean {
-    return ENABLED.agent && action.type !== "reframe" && action.type !== "note";
+    return ENABLED.agent && action.type !== ActionType.Reframe && action.type !== ActionType.Note;
 }
 
 let rewriting = false;
