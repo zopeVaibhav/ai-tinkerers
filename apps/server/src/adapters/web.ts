@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { listConflicts } from "../repository";
+import { listConflicts, listDecisions } from "../repository";
 
 const connections = new Set<Response>();
 
@@ -15,7 +15,7 @@ export async function openStream(req: Request, res: Response) {
     });
 
     connections.add(res);
-    res.write(`data: ${JSON.stringify(await listConflicts())}\n\n`);
+    res.write(`data: ${JSON.stringify(await snapshot())}\n\n`);
 
     req.on("close", () => {
         connections.delete(res);
@@ -25,6 +25,11 @@ export async function openStream(req: Request, res: Response) {
 /** Every web view sees the whole registry, so any change reaches every tab. */
 export async function pushWeb() {
     if (!connections.size) return;
-    const payload = `data: ${JSON.stringify(await listConflicts())}\n\n`;
+    const payload = `data: ${JSON.stringify(await snapshot())}\n\n`;
     for (const res of connections) res.write(payload);
+}
+
+async function snapshot() {
+    const [conflicts, decisions] = await Promise.all([listConflicts(), listDecisions()]);
+    return { conflicts, decisions };
 }

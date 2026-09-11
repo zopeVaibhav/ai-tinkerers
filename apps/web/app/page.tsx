@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ConflictStatus } from "@repo/types";
-import type { Action, Conflict } from "@repo/types";
+import type { Action, Conflict, Decision } from "@repo/types";
 import { ConflictList, StatusFilter } from "./components/conflict-list";
 import { ConflictDetail } from "./components/conflict-detail";
+import { DecisionList } from "./components/decision-list";
 import { STATUS_ORDER, haystack } from "./lib/display";
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:5101";
@@ -14,6 +15,8 @@ type Link = "connecting" | "live" | "dropped";
 
 export default function Page() {
     const [conflicts, setConflicts] = useState<Conflict[]>([]);
+    const [decisions, setDecisions] = useState<Decision[]>([]);
+    const [tab, setTab] = useState<"conflicts" | "decisions">("conflicts");
     const [link, setLink] = useState<Link>("connecting");
     const [selected, setSelected] = useState<string | null>(null);
     const [status, setStatus] = useState<ConflictStatus | "all">("all");
@@ -27,7 +30,12 @@ export default function Page() {
         source.onerror = () => setLink("dropped");
         source.onmessage = (event) => {
             setLink("live");
-            setConflicts(JSON.parse(event.data) as Conflict[]);
+            const payload = JSON.parse(event.data) as {
+                conflicts: Conflict[];
+                decisions: Decision[];
+            };
+            setConflicts(payload.conflicts ?? []);
+            setDecisions(payload.decisions ?? []);
         };
         return () => source.close();
     }, []);
@@ -98,24 +106,62 @@ export default function Page() {
                 </div>
             </header>
 
-            <div className="flex flex-wrap items-center gap-3">
-                <StatusFilter value={status} counts={counts} onChange={setStatus} />
-                <input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="search threads, subsystems, people"
-                    className="min-w-56 flex-1 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm"
-                />
+            <div className="flex gap-1">
+                <Tab active={tab === "conflicts"} onClick={() => setTab("conflicts")}>
+                    Contradictions {conflicts.length}
+                </Tab>
+                <Tab active={tab === "decisions"} onClick={() => setTab("decisions")}>
+                    Recorded decisions {decisions.length}
+                </Tab>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-[22rem_1fr]">
-                <ConflictList
-                    conflicts={visible}
-                    selectedId={conflict?.id ?? null}
-                    onSelect={setSelected}
-                />
-                {conflict && <ConflictDetail conflict={conflict} onAct={act} />}
-            </div>
+            {tab === "decisions" ? (
+                <DecisionList decisions={decisions} />
+            ) : (
+                <>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <StatusFilter value={status} counts={counts} onChange={setStatus} />
+                        <input
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                            placeholder="search threads, subsystems, people"
+                            className="min-w-56 flex-1 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm"
+                        />
+                    </div>
+
+                    <div className="grid gap-6 lg:grid-cols-[22rem_1fr]">
+                        <ConflictList
+                            conflicts={visible}
+                            selectedId={conflict?.id ?? null}
+                            onSelect={setSelected}
+                        />
+                        {conflict && <ConflictDetail conflict={conflict} onAct={act} />}
+                    </div>
+                </>
+            )}
         </main>
+    );
+}
+
+function Tab({
+    active,
+    onClick,
+    children,
+}: {
+    active: boolean;
+    onClick: () => void;
+    children: React.ReactNode;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            className={`rounded-lg px-3 py-1.5 text-sm ${
+                active
+                    ? "bg-neutral-900 text-white"
+                    : "border border-neutral-300 text-neutral-600 hover:bg-neutral-50"
+            }`}
+        >
+            {children}
+        </button>
     );
 }

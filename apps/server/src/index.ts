@@ -50,7 +50,13 @@ async function readThread(thread: ThreadRef, messages: Message[], lastSpeaker: s
     if (!ENABLED.agent) return;
 
     const claim = await extract(messages);
-    if (!claim) return;
+    if (!claim) {
+        console.log(`${thread.threadName}: nothing decided yet`);
+        for (const message of messages.slice(-4)) {
+            console.log(`    ${message.by}: ${message.text.slice(0, 90)}`);
+        }
+        return;
+    }
 
     const result = await record(thread, claim, lastSpeaker);
     if (!result?.changed) return;
@@ -59,6 +65,7 @@ async function readThread(thread: ThreadRef, messages: Message[], lastSpeaker: s
         `decision recorded ${thread.threadName}: ${claim.subsystem}/${claim.condition} -> ${claim.action}`,
     );
     await confirmDecision(result.decision);
+    void pushWeb();
 }
 
 /**

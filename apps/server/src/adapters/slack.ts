@@ -40,6 +40,7 @@ type MessageArgs = {
 let client: SlackClient | null = null;
 
 const channelNames = new Map<string, string>();
+const userNames = new Map<string, string>();
 
 const DIRECT = [ActionType.Acknowledge] as const;
 
@@ -105,14 +106,21 @@ export async function startSlack(
      */
     app.event("message", async (args: MessageArgs) => {
         const event = args.event;
+        console.log(
+            `slack message seen: channel=${event.channel} thread=${event.thread_ts ?? "-"} subtype=${event.subtype ?? "-"} bot=${event.bot_id ?? "-"}`,
+        );
         if (event.bot_id || (event.subtype && event.subtype !== "thread_broadcast")) return;
         if (!event.text?.trim()) return;
 
-        const rootTs = event.thread_ts ?? event.ts;
-        const threadKey = `${event.channel}:${rootTs}`;
+        // A thread is one conversation. So is a channel where nobody threads —
+        // which is how most teams actually talk. Keying a bare message by its
+        // own ts would make every sentence its own conversation of one.
+        const rootTs = event.thread_ts;
+        const threadKey = rootTs ? `${event.channel}:${rootTs}` : event.channel;
 
         onThreadQuiet(threadKey, async () => {
             const messages = await readThread(event.channel, rootTs);
+            console.log(`thread agent reading ${threadKey}: ${messages.length} message(s)`);
             if (messages.length === 0) return;
             const thread: ThreadRef = {
                 surface: Surface.Slack,
@@ -120,7 +128,7 @@ export async function startSlack(
                 threadName: await channelName(event.channel),
             };
             const last = messages[messages.length - 1];
-            await onThread(thread, messages, last?.by ?? Surface.Slack);
+            await onThread(thread, messages, await personName(last?.by));
         });
     });
 
@@ -133,11 +141,11 @@ export async function startSlack(
 export async function confirmDecision(decision: Decision) {
     if (!client) return;
     const [channel, ts] = decision.threadKey.split(":");
-    if (!channel || !ts) return;
+    if (!channel) return;
 
     await client.chat.postMessage({
         channel,
-        thread_ts: ts,
+        ...(ts ? { thread_ts: ts } : {}),
         text: `Recorded: ${decision.subsystem} · on ${decision.condition} · ${decision.action}`,
         blocks: [
             {
@@ -153,16 +161,42 @@ export async function confirmDecision(decision: Decision) {
     });
 }
 
-async function readThread(channel: string, ts: string): Promise<Message[]> {
+async function readThread(channel: string, ts?: string): Promise<Message[]> {
     if (!client) return [];
     try {
-        const replies = await client.conversations.replies({ channel, ts, limit: 50 });
-        return (replies.messages ?? [])
+        const result = ts
+            ? await client.conversations.replies({ channel, ts, limit: 50 })
+            : await client.conversations.history({ channel, limit: 25 });
+
+        const messages = (result.messages ?? [])
             .filter((message) => !message.bot_id && message.text?.trim())
             .map((message) => ({ by: message.user ?? "someone", text: message.text ?? "" }));
+
+        // history comes back newest first; a conversation reads the other way.
+        return ts ? messages : messages.reverse();
     } catch (error) {
-        console.error("could not read thread:", (error as Error).message);
+        console.error("could not read conversation:", (error as Error).message);
         return [];
+    }
+}
+
+/**
+ * history and replies return user ids, not names. The conflict card has to say
+ * who decided each side, so an id there reads as a bug.
+ */
+async function personName(userId?: string): Promise<string> {
+    if (!userId) return Surface.Slack;
+    const cached = userNames.get(userId);
+    if (cached) return cached;
+    if (!client) return userId;
+    try {
+        const info = await client.users.info({ user: userId });
+        const name =
+            info.user?.profile?.display_name || info.user?.real_name || info.user?.name || userId;
+        userNames.set(userId, name);
+        return name;
+    } catch {
+        return userId;
     }
 }
 
