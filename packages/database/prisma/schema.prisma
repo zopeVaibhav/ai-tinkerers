@@ -14,6 +14,8 @@ enum Surface {
     web
 }
 
+/// A register, not a role. It selects which framing a window renders; what a
+/// window is allowed to produce is decided by Surface.
 enum Audience {
     engineer
     lead

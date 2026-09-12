@@ -61,7 +61,7 @@ const PROMPTS = {
 type PromptKey = keyof typeof PROMPTS;
 
 export async function startSlack(
-    act: (conflictId: string, action: Action, from: Audience) => Promise<unknown>,
+    act: (conflictId: string, action: Action, from: Surface) => Promise<unknown>,
     onThread: (thread: ThreadRef, messages: Message[], lastSpeaker: string) => Promise<void>,
 ) {
     const app = new App({
@@ -75,7 +75,7 @@ export async function startSlack(
         app.action(type, async (args: ActionArgs) => {
             await args.ack();
             const id = conflictOf(args);
-            if (id) await act(id, { type, by: who(args.body) }, Audience.Lead);
+            if (id) await act(id, { type, by: who(args.body) }, Surface.Slack);
         });
     }
 
@@ -95,7 +95,7 @@ export async function startSlack(
             const value = args.view.state.values.field?.value?.value?.trim();
             const id = args.view.private_metadata;
             if (!value || !id) return;
-            await act(id, toAction(key, who(args.body), value), Audience.Lead);
+            await act(id, toAction(key, who(args.body), value), Surface.Slack);
         });
     }
 

@@ -5,24 +5,34 @@ How to run and test this yourself. No help needed.
 ## Start
 
 ```bash
-cd /Users/vaibhav_zope/utility/ai-tinkers
-docker compose up -d     # Postgres on :5433, first time only
-bun run db:push          # after any schema change
+cd <repo root>
+bun install
+bun run generate          # Prisma client, after any schema change
+bun run db:push           # push schema to whatever DATABASE_URL points at
 bun run dev
 ```
 
-Starts both: web on `http://localhost:5100`, server on `http://localhost:5101`.
+Starts both: web on `http://localhost:5100`, server on `http://localhost:5101`
+(`SERVER_PORT` in `.env`, default 5101).
+
+**Which database.** `DATABASE_URL` in `.env` decides. Two options:
+
+- **Remote** — a Prisma Postgres URL. Nothing to start. Shared with whoever else
+  holds that URL, so `db:clear` wipes their rows too.
+- **Local** — `docker compose up -d` brings up Postgres on `:5433`, then set
+  `DATABASE_URL=postgres://shared:shared@localhost:5433/shared_object` and
+  `bun run db:push`.
 
 Watch the terminal. You should see:
 
 ```
 server on http://localhost:5101
-slack view reattached ts=...
-telegram view reattached message_id=...
+slack connected
+telegram connected
 ```
 
-`registered` instead of `reattached` means it posted a brand new card. That
-happens after `.state.json` is deleted, or if the old card was deleted.
+A surface that prints nothing is switched off because its credentials are
+missing from `.env`. See `ENABLED` in `apps/server/src/config/env.ts`.
 
 Stop with `Ctrl+C`.
 
@@ -41,15 +51,25 @@ Every conversation thread gets its own agent. It records what its room decided,
 and when two rooms decide opposite things about the same subsystem, both rooms
 get told. Read `ref/PLAN.md` first.
 
-## Three ways to raise an issue
+## How an issue gets raised
 
-| Where       | How                                                 |
-| ----------- | --------------------------------------------------- |
-| Slack       | `@Shared Object` followed by the customer's message |
-| Telegram DM | message the bot directly — you are the customer     |
-| Web         | the dashed **Inbound customer message** box         |
+**Only by talking in Slack.** Nobody fills in a form.
 
-The Telegram group cannot raise issues. Engineers there tap, they do not file.
+Every message in a channel the bot is in belongs to a thread. Once the typing
+stops, that thread's agent re-reads it and decides whether anything was settled.
+A bare channel with no threading counts as one conversation — see the `message`
+handler in `apps/server/src/adapters/slack.ts`.
+
+The other two surfaces cannot originate anything:
+
+| Surface        | Can raise an issue | Why                                                         |
+| -------------- | ------------------ | ----------------------------------------------------------- |
+| Slack          | yes                | the only intake path                                        |
+| Telegram group | no                 | `callback_query` only — buttons, no message handler         |
+| Web            | no                 | reads `/stream`, acts on `/conflicts/:id/action`, no intake |
+
+To raise one without Slack, write the decision straight into the store — see
+[Checking it without Slack](#checking-it-without-slack).
 
 ## The full test, start to finish
 
@@ -59,21 +79,24 @@ The Telegram group cannot raise issues. Engineers there tap, they do not file.
 4. Reset to a clean state:
 
     ```bash
-    curl -X POST http://localhost:5101/reset
+    bun run db:clear
     ```
 
-    All three go back to "Nothing reported yet". They change **in place** — they
-    do not bump to the bottom and do not notify. Keep them on screen.
+    This deletes rows directly and does **not** fan out — `onChange` never
+    fires, so nothing re-renders. Refresh the web page, and delete the stale
+    Slack and Telegram cards by hand. They now point at conflict ids that no
+    longer exist.
 
-5. On the web page, paste a messy customer message into **Inbound customer
-   message** and hit **Hand to agent**. Takes a few seconds.
-6. Check all three now say different things:
+5. In Slack, have two channels decide opposite things about the same subsystem —
+   one says hard-fail on payment timeout, the other says retry silently. Each
+   takes a few seconds after the typing stops.
+6. When the clash is found, check all three say different things:
     - Telegram — a decision, terse, for a phone
     - Slack — status, owner, what is blocked
-    - Web — all three framings side by side
-7. In Slack click **Take it**, then **Propose fix**, type something, submit.
-8. On your phone, tap **Approve**. Slack and web both flip to Approved.
-9. Click **Resolve** anywhere. All three finish.
+    - Web — both framings side by side
+7. In Slack click **Acknowledge**, then **Supersede**, pick a winner, submit.
+8. On your phone, the Telegram card follows in place. It can only acknowledge.
+9. Watch the losing decision go grey in the **Recorded decisions** tab.
 
 If every step moved all three surfaces, the whole thing works.
 
@@ -86,18 +109,22 @@ You are probably looking at the bottom of the channel while the card is higher u
 Start the server.
 
 **Telegram went silent after changing group settings.** Telegram upgraded the
-group to a supergroup and the chat id changed. Send
-`/start@paavgang_shared_object_bot` in the group, read the new id from the
-terminal (`telegram chat seen: id=...`), and put it in `.env` as
-`TELEGRAM_CHAT_ID`.
+group to a supergroup and the chat id changed. Send a message in the group, read
+the new id from the terminal (`telegram chat seen: id=...`), and put it in `.env`
+as `TELEGRAM_CHAT_ID`.
 
-**A button did nothing.** Check the terminal. Three lines mean it was deliberate:
+**A button did nothing.** Check the terminal. Two lines mean it was deliberate,
+and both are printed by `act()` in `apps/server/src/actions.ts` before anything
+is written:
 
-- `ignored stale <action>` — someone already moved the object past that step
-- `refused <action> from <audience>: not allowed on that surface` — that window
-  has no right to do it
-- `refused approve from <name>: cannot approve own proposal` — get someone else
-  to sign off
+- `refused <action> from <surface>: that surface cannot produce it` — that
+  window has no way to originate it
+- `ignored stale <action> from <name>` — someone already moved the object past
+  that step
+
+A third line means it worked:
+
+- `superseded <thread> (<action>) in favour of <thread>`
 
 **The agent ignores everything in a channel.** Two causes. Either the app is
 missing `channels:history` / `channels:read`, or the bot event `message.channels`
@@ -108,8 +135,8 @@ only records when someone states what the system should do and the claim fits th
 closed vocabularies in `packages/types/src/enums.ts`. Still discussing means no
 decision.
 
-**Piles of old cards.** Every card from before the last `.state.json` reset is
-dead. Delete them; only the newest is registered.
+**Piles of old cards.** `db:clear` does not retract anything already posted.
+Every card from before the last clear is dead. Delete them by hand.
 
 ## Your own sandbox
 
@@ -123,7 +150,8 @@ Each developer needs:
 3. Their own Slack channel, with the app invited
 4. Their own `.env` holding those values
 
-The shared channel and group are for demos only, run from one machine.
+The shared channel and group are for demos only, run from one machine. The same
+goes for a remote `DATABASE_URL` — one clear wipes it for everyone on it.
 
 ## Checking it without Slack
 
@@ -138,6 +166,8 @@ detection makes no duplicate, acknowledging moves it out of open, a phone cannot
 leave a note, superseding resolves it and marks the losing claim superseded, a
 settled clash is never found again, and a second clash on another subsystem
 stands on its own.
+
+It writes real rows. Run `db:clear` after it, not just before.
 
 If any line says FAIL, stop and read it before touching Slack.
 
@@ -155,18 +185,17 @@ Check all of these before filming. `bun run db:clear` between each.
 ## Useful commands
 
 ```bash
-# every issue and its status
-curl -s http://localhost:5101/issues | python3 -m json.tool
+# open contradictions
+curl -s http://localhost:5101/conflicts | python3 -m json.tool
+
+# every decision on record
+curl -s http://localhost:5101/decisions | python3 -m json.tool
 
 # browse the database
 bun run db:studio
 
-# raise an issue from the terminal
-curl -X POST http://localhost:5101/report -H 'Content-Type: application/json' \
-  -d '{"text":"checkout hangs then errors","from":"vaibhav"}'
-
-# act on one
-curl -X POST http://localhost:5101/issues/<id>/action -H 'Content-Type: application/json' \
+# act on a conflict
+curl -X POST http://localhost:5101/conflicts/<id>/action -H 'Content-Type: application/json' \
   -d '{"type":"acknowledge","by":"vaibhav"}'
 
 # wipe everything and start clean between takes
@@ -180,8 +209,12 @@ bun run --filter server check:detection
 
 # checks that must pass before pushing
 bun run typecheck
+bun run test
 bun run format
 ```
+
+Every route the server has: `GET /health`, `GET /conflicts`, `GET /decisions`,
+`GET /stream`, `POST /conflicts/:id/action`.
 
 ## Action types
 
@@ -191,13 +224,15 @@ Each needs `by`. `resolve` needs `resolution`, `supersede` needs `winner` (`a` o
 `b`) and `note`, `note` needs `text`. `reframe` is written by the agent and no
 window owns it.
 
-Who may do what:
+Who may do what — keyed on the **surface**, never on the audience:
 
-|                           | acknowledge | resolve | supersede | note |
-| ------------------------- | ----------- | ------- | --------- | ---- |
-| Slack and web (lead)      | yes         | yes     | yes       | yes  |
-| Telegram group (engineer) | yes         | no      | no        | no   |
+|                | acknowledge | resolve | supersede | note |
+| -------------- | ----------- | ------- | --------- | ---- |
+| Slack          | yes         | yes     | yes       | yes  |
+| Web            | yes         | yes     | yes       | yes  |
+| Telegram group | yes         | no      | no        | no   |
 
 The phone cannot type, so it cannot supersede or leave a note. Both the renderer
-and the server enforce that — a refused action prints `refused ... not allowed on
-that surface`.
+and the server enforce that — a refused action prints
+`refused <action> from <surface>: that surface cannot produce it`. Source of
+truth is `ALLOWED` in `packages/core/src/permissions.ts`.
