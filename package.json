@@ -20,7 +20,8 @@
         "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
         "db:seed": "bun run --filter @repo/database db:seed",
         "test": "bun test packages apps",
-        "db:clear": "bun run --filter @repo/database db:clear"
+        "db:clear": "bun run --filter @repo/database db:clear",
+        "db:demo": "bun run --filter @repo/database db:demo"
     },
     "devDependencies": {
         "prettier": "^3.9.6",

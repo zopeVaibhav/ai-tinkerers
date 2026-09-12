@@ -5,7 +5,7 @@ import { prisma } from "./index";
  * has decided, the other has not. The clash itself must always be produced by
  * the real path, because that is the only thing the product actually claims.
  *
- * Never fabricate a conflict here. See ref/PLAN.md and issue #10.
+ * Never fabricate a conflict here. See issue #10.
  */
 async function main() {
     await prisma.view.deleteMany();

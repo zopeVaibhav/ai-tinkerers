@@ -10,3 +10,4 @@ out
 .state.json
 .playwright-mcp
 *.tsbuildinfo
+ref

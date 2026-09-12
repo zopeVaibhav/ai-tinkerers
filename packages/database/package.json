@@ -13,7 +13,8 @@
         "db:seed": "bun --env-file=../../.env run src/seed.ts",
         "studio": "bun --env-file=../../.env x prisma studio",
         "typecheck": "tsc --noEmit",
-        "db:clear": "bun --env-file=../../.env run src/clear.ts"
+        "db:clear": "bun --env-file=../../.env run src/clear.ts",
+        "db:demo": "bun --env-file=../../.env run src/demo.ts"
     },
     "dependencies": {
         "@prisma/client": "^6.19.0",
