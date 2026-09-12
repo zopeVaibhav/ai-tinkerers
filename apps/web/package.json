@@ -10,6 +10,7 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
+        "@ai-sdk/openai-compatible": "1.0.54",
         "@copilotkit/react-core": "1.71.0",
         "@copilotkit/runtime": "1.71.0",
         "@repo/core": "workspace:*",
