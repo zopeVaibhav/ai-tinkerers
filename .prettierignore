@@ -2,3 +2,6 @@ node_modules
 .turbo
 .next
 bun.lock
+
+# Prisma's generator owns these, and prettier un-minifies its runtime bundles
+packages/database/generated
