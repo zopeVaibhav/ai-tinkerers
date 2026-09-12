@@ -61,7 +61,11 @@ app.post("/conflicts/:id/action", async (req, res) => {
  *
  * Comparing this decision against the registry is issue #6.
  */
-async function readThread(thread: ThreadRef, messages: Message[], lastSpeaker: string) {
+async function readThread(
+    thread: ThreadRef,
+    messages: Message[],
+    nameOf: (userId?: string) => Promise<string>,
+) {
     if (!ENABLED.agent) return;
 
     const claim = await extract(messages);
@@ -73,7 +77,7 @@ async function readThread(thread: ThreadRef, messages: Message[], lastSpeaker: s
         return;
     }
 
-    const result = await record(thread, claim, lastSpeaker);
+    const result = await record(thread, claim, await nameOf(whoSaid(messages, claim.rawText)));
     if (!result?.changed) return;
 
     console.log(
@@ -83,6 +87,26 @@ async function readThread(thread: ThreadRef, messages: Message[], lastSpeaker: s
     void pushWeb();
 
     for (const conflict of await detect(result.decision)) await announce(conflict);
+}
+
+/**
+ * Whoever typed the sentence the agent picked out is who decided it. Crediting
+ * whoever spoke last instead hands one room's decision to whoever happened to
+ * be talking when the thread was re-read, which is rarely the same person.
+ */
+function whoSaid(messages: Message[], rawText: string): string | undefined {
+    const last = messages[messages.length - 1]?.by;
+    const needle = rawText.trim().toLowerCase();
+    if (!needle) return last;
+
+    // Either direction: the agent quotes part of a longer message as often as
+    // it returns the whole one.
+    const match = messages.find((message) => {
+        const text = message.text.trim().toLowerCase();
+        return text.includes(needle) || needle.includes(text);
+    });
+
+    return match?.by ?? last;
 }
 
 /**
