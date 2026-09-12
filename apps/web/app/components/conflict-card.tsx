@@ -38,6 +38,13 @@ export function ConflictCard({
                 ))}
             </div>
 
+            {conflict.resolution && (
+                <p className="rounded-lg bg-neutral-50 p-3 text-xs text-neutral-600">
+                    <span className="text-neutral-400">Resolution — </span>
+                    {conflict.resolution}
+                </p>
+            )}
+
             {conflict.status === ConflictStatus.Open && (
                 <button
                     onClick={onAcknowledge}
