@@ -1,4 +1,4 @@
-import { Audience, ConflictStatus, Surface } from "@repo/types";
+import { ConflictStatus, Surface } from "@repo/types";
 import type { Conflict } from "@repo/types";
 
 export const STATUS_ORDER: ConflictStatus[] = [
@@ -24,21 +24,6 @@ export const SURFACE_LABEL: Record<Surface, string> = {
     [Surface.Telegram]: "Telegram",
     [Surface.Web]: "web",
 };
-
-/**
- * Which surfaces currently carry this conflict for one reader, read off the
- * subscription table rather than restated here. The adapters decide what
- * audience a window is for; repeating that mapping in the UI would let the two
- * drift apart silently.
- *
- * Empty means no window is open for that reader yet.
- */
-export function surfacesFor(conflict: Conflict, audience: Audience): string[] {
-    const surfaces = conflict.views
-        .filter((view) => view.audience === audience)
-        .map((view) => SURFACE_LABEL[view.surface]);
-    return [...new Set(surfaces)];
-}
 
 /** Short enough to sit in a list row without wrapping it. */
 export function ago(iso: string, now = Date.now()): string {

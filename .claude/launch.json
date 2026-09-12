@@ -1,0 +1,15 @@
+{
+    "version": "0.0.1",
+    "configurations": [
+        {
+            "name": "web-mock",
+            "runtimeExecutable": "bun",
+            "runtimeArgs": [
+                "run",
+                "--filter=web",
+                "dev:mock"
+            ],
+            "port": 5100
+        }
+    ]
+}

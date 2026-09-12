@@ -4,6 +4,7 @@
     "private": true,
     "scripts": {
         "dev": "next dev --port 5100",
+        "dev:mock": "NEXT_PUBLIC_MOCK=1 next dev --port 5100",
         "build": "next build",
         "start": "next start --port 5100",
         "typecheck": "tsc --noEmit"
