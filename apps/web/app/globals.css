@@ -1,5 +1,78 @@
 @import "tailwindcss";
 
+/**
+ * The typefaces from copilotkit.ai, loaded by next/font in layout.tsx. Mapping
+ * them onto Tailwind's own tokens here makes them the default for text and for
+ * `code`, so no element needs a font class.
+ *
+ * CopilotKit ships a scoped Tailwind theme of its own, so the chat panel keeps
+ * the stock system stack unless its two tokens are pointed at the same pair.
+ */
+@theme inline {
+    --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+    --font-mono: var(--font-spline), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root {
+    --cpk-font-sans: var(--font-sans);
+    --cpk-font-mono: var(--font-mono);
+}
+
+code,
+pre,
+kbd,
+samp {
+    font-family: var(--font-mono);
+}
+
+/**
+ * Dark mode, as an inversion of the palette rather than a second set of classes.
+ *
+ * Tailwind v4 compiles every colour utility to `var(--color-…)`, so redefining
+ * the ramp under `.dark` flips the whole surface — no component carries a
+ * `dark:` variant, and none can be forgotten. The scale is mirrored end for end:
+ * what was the lightest neutral becomes the darkest.
+ *
+ * `--color-white` is the card, and it lands one step above `--color-neutral-50`,
+ * the page behind it. Inverting white to true black instead would make every
+ * card disappear into the background.
+ *
+ * CopilotKit ships its own `.dark` block keyed to the same class, so the chat
+ * column follows without anything further here.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+.dark {
+    color-scheme: dark;
+
+    --color-white: #171717;
+    --color-neutral-50: #0a0a0a;
+    --color-neutral-100: #171717;
+    --color-neutral-200: #2e2e2e;
+    --color-neutral-300: #3f3f3f;
+    --color-neutral-400: #737373;
+    --color-neutral-500: #a1a1a1;
+    --color-neutral-600: #d4d4d4;
+    --color-neutral-700: #e5e5e5;
+    --color-neutral-800: #f0f0f0;
+    --color-neutral-900: #fafafa;
+    --color-neutral-950: #ffffff;
+
+    /* The status pills are a 100 background under 900 text, so both ends of
+       those three ramps have to swap or the pills stay light. */
+    --color-red-100: #450a0a;
+    --color-red-900: #fca5a5;
+    --color-amber-100: #451a03;
+    --color-amber-900: #fcd34d;
+    --color-emerald-100: #022c22;
+    --color-emerald-900: #6ee7b7;
+
+    /* The stream indicator reads at 600, which is too dark to see on black. */
+    --color-red-600: #f87171;
+    --color-amber-600: #fbbf24;
+    --color-emerald-600: #34d399;
+}
+
 /** Jumps between sections read as a cut; scrolling there reads as a move. */
 html {
     scroll-behavior: smooth;
@@ -9,23 +82,11 @@ html {
     html {
         scroll-behavior: auto;
     }
-
-    aside[data-copilot-sidebar] {
-        transition: none !important;
-    }
 }
 
 /** Send reads as "off to the right", not "up". The icon ships as an up arrow. */
 [data-testid="copilot-send-button"] svg {
     transform: rotate(90deg);
-}
-
-/**
- * No blur on the seam. CopilotKit ships the panel with a shadow-xl, so this
- * turns that off too and leaves a plain one-pixel edge between the two halves.
- */
-aside[data-copilot-sidebar] {
-    box-shadow: none !important;
 }
 
 /**
