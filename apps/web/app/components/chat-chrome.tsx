@@ -1,6 +1,10 @@
 "use client";
 
-import { CopilotChatToggleButton, CopilotModalHeader } from "@copilotkit/react-core/v2";
+import {
+    CopilotChatInput,
+    CopilotChatToggleButton,
+    CopilotModalHeader,
+} from "@copilotkit/react-core/v2";
 import { CopilotKitKite } from "./copilotkit-kite";
 
 /**
@@ -25,3 +29,18 @@ export const ChatHeader = Object.assign(function ChatHeader() {
         </header>
     );
 }, CopilotModalHeader);
+
+/**
+ * The add-attachment menu. The sidebar's props omit `attachments` and
+ * `onAddFile` altogether, so the button renders permanently disabled and can
+ * never do anything — it is a dead control taking a column from the text.
+ */
+const NoAddMenuButton = Object.assign(function NoAddMenuButton() {
+    return null;
+}, CopilotChatInput.AddMenuButton);
+
+export const ChatInput = Object.assign(function ChatInput(
+    props: React.ComponentProps<typeof CopilotChatInput>,
+) {
+    return <CopilotChatInput {...props} addMenuButton={NoAddMenuButton} />;
+}, CopilotChatInput);

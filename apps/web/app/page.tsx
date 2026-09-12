@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ConflictStatus } from "@repo/types";
 import type { Action, Conflict, Decision } from "@repo/types";
 import { ConflictList, StatusFilter } from "./components/conflict-list";
@@ -12,7 +12,9 @@ import { STATUS_ORDER, haystack } from "./lib/display";
 import { mockRegistry } from "./lib/fixtures";
 import { SmoothMessageView } from "./components/smooth-chat";
 import { ChatWelcome } from "./components/chat-welcome";
-import { ChatHeader, NoToggleButton } from "./components/chat-chrome";
+import { ChatHeader, ChatInput, NoToggleButton } from "./components/chat-chrome";
+import { useDesktop } from "./lib/use-desktop";
+import { SuggestionsToInput } from "./components/chat-suggestions";
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:5101";
 
@@ -31,6 +33,9 @@ export default function Page() {
     const [status, setStatus] = useState<ConflictStatus | "all">("all");
     const [query, setQuery] = useState("");
     const [name, setName] = useState("");
+    const [chatOpen, setChatOpen] = useState(false);
+    const desktop = useDesktop();
+    const detail = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         setName(localStorage.getItem("name") ?? "");
@@ -80,6 +85,22 @@ export default function Page() {
         [visible, selected],
     );
 
+    /**
+     * Side by side the detail is already in view. Stacked, it sits under the
+     * whole list, so tapping a card would otherwise look like nothing happened.
+     */
+    function choose(id: string) {
+        setSelected(id);
+        if (desktop) return;
+        requestAnimationFrame(() => {
+            const node = detail.current;
+            if (!node) return;
+            // scrollTo rather than scrollIntoView: the latter is a no-op in some
+            // embedded views, and this needs an offset above the card anyway.
+            window.scrollTo({ top: node.getBoundingClientRect().top + window.scrollY - 12 });
+        });
+    }
+
     function rename(value: string) {
         setName(value);
         localStorage.setItem("name", value);
@@ -104,21 +125,33 @@ export default function Page() {
     }
 
     return (
-        <main className="mx-auto flex max-w-6xl flex-col gap-6 p-4 sm:p-8">
+        <main
+            /* Sides and bottom set separately: `sm:p-8` and `pb-24` carry the same
+               specificity, so the shorthand wins and the clearance is lost. */
+            className={`mx-auto flex max-w-6xl flex-col gap-6 px-4 pt-4 sm:px-8 sm:pt-8 ${
+                desktop ? "pb-4 sm:pb-8" : "pb-24"
+            }`}
+        >
             <RegistryCopilot
                 conflicts={conflicts}
                 decisions={decisions}
                 onAct={(conflictId, action) => send(conflictId, action)}
             />
-            {/* Always open, and not closeable: the registry and the copilot are one
-                screen, so there is no state where the panel is not there. */}
+            {/*
+             * Side by side, the copilot is part of the screen: always open, with
+             * nothing offering to close it. On a phone it can only be full screen,
+             * so there it has to be dismissable — otherwise the registry is
+             * unreachable. The controls come back with it.
+             */}
             <CopilotSidebar
-                width="30%"
-                open
+                width={desktop ? "30%" : "100%"}
+                open={desktop || chatOpen}
+                onOpenChange={setChatOpen}
+                suggestionView={SuggestionsToInput}
+                input={ChatInput}
                 messageView={SmoothMessageView}
                 welcomeScreen={ChatWelcome}
-                header={ChatHeader}
-                toggleButton={NoToggleButton}
+                {...(desktop ? { header: ChatHeader, toggleButton: NoToggleButton } : {})}
             />
             <header className="flex flex-wrap items-baseline justify-between gap-4">
                 <div>
@@ -177,9 +210,11 @@ export default function Page() {
                         <ConflictList
                             conflicts={visible}
                             selectedId={conflict?.id ?? null}
-                            onSelect={setSelected}
+                            onSelect={choose}
                         />
-                        {conflict && <ConflictDetail conflict={conflict} onAct={act} />}
+                        <div ref={detail} className="scroll-mt-4">
+                            {conflict && <ConflictDetail conflict={conflict} onAct={act} />}
+                        </div>
                     </div>
                 </>
             )}

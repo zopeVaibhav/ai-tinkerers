@@ -16,7 +16,12 @@ export function ConflictCard({
     onAcknowledge: () => void;
 }) {
     return (
-        <div className="my-2 flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4">
+        <div
+            /* A hook for the message chrome: a turn that is a card has nothing
+               for the copy button to copy. */
+            data-conflict-card=""
+            className="my-2 flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4"
+        >
             <div className="flex items-center justify-between gap-2">
                 <span
                     className={`rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[conflict.status]}`}

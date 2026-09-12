@@ -29,16 +29,60 @@ aside[data-copilot-sidebar] {
 }
 
 /**
- * Suggestions sit under the greeting, so they should read as a list of answers
- * to it rather than a left-aligned toolbar. The stock container is a wrapping
- * row: this makes it a centred column so each one lands on its own line under
- * the question, whatever the panel width.
+ * The composer ships as a pill sized for a wide window. In a 30% panel that
+ * leaves a two-line placeholder in a one-line box. A softer radius and a taller
+ * text area make it read as somewhere to write rather than a search field.
  */
-[data-testid="copilot-suggestions"] {
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    /* Stock padding is pr-4 against pl-0, which lands the stack 8px left of the heading. */
-    padding-inline: 0 !important;
-    margin-inline: 0 !important;
+.copilotKitInput {
+    border-radius: 1rem;
+}
+
+[data-testid="copilot-chat-textarea"] {
+    min-height: 2.5rem;
+    line-height: 1.5;
+    /* The grid around it already pads by 12px; the field's own px-5 py-3 on top
+       of that pushed the text well inside the rounded edge. */
+    padding-inline: 0.25rem;
+    padding-block: 0.5rem;
+}
+
+/**
+ * Once the text wraps, the composer switches to a two-row grid: the text on top,
+ * and a row underneath holding the add-menu on the left and send on the right.
+ * With the add-menu gone that row is an empty strip beside the button.
+ *
+ * So the empty cell is dropped and send returns to the text's own row, sitting
+ * at its bottom edge — one row again, at any length.
+ */
+.copilotKitInput [data-layout] > div:empty {
+    display: none;
+}
+
+.copilotKitInput [data-layout="expanded"] > div:has([data-testid="copilot-chat-textarea"]) {
+    /* Expanded spans the text across every column, leaving send nowhere to go. */
+    grid-column: 2 !important;
+}
+
+.copilotKitInput [data-layout="expanded"] > div:last-child {
+    grid-row: 1 !important;
+    grid-column: 3 !important;
+    align-self: end !important;
+}
+
+/**
+ * Copy takes the message's text. A turn whose answer is a conflict card has
+ * none, so the button silently does nothing — worse than not being offered.
+ */
+.copilotKitMessage:has([data-conflict-card]) [data-testid="copilot-copy-button"] {
+    display: none;
+}
+
+/**
+ * A long unbroken string has no wrap opportunity, so the bubble keeps its
+ * shape and the text runs out through the side of it. Ids, urls and mashed
+ * keyboard input all do this.
+ */
+.copilotKitMessages,
+.copilotKitMessage {
+    overflow-wrap: anywhere;
 }

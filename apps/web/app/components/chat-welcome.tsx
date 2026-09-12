@@ -25,7 +25,7 @@ export function ChatWelcome({ input, suggestionView }: WelcomeScreenProps) {
                 </h1>
                 {suggestionView}
             </div>
-            <div className="px-8 pb-4">{input}</div>
+            <div className="px-3 pb-4">{input}</div>
         </div>
     );
 }

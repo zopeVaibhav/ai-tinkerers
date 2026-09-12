@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CopilotChatAssistantMessage, CopilotChatMessageView } from "@copilotkit/react-core/v2";
+import {
+    CopilotChatAssistantMessage,
+    CopilotChatMessageView,
+    CopilotChatUserMessage,
+} from "@copilotkit/react-core/v2";
+import { fillChatInput } from "../lib/chat-input";
 
 /**
  * A model streams in bursts: a whole clause lands at once, then nothing for a
@@ -63,9 +68,38 @@ const SmoothAssistantMessage = Object.assign(function SmoothAssistant(props: Ass
     );
 }, CopilotChatAssistantMessage);
 
+type UserMessageProps = React.ComponentProps<typeof CopilotChatUserMessage>;
+
+/**
+ * CopilotKit draws the edit button only when it is given something to do with
+ * it. Pressing it puts that turn's text back in the composer, so a question can
+ * be amended and asked again.
+ *
+ * It does not rewrite the thread. The library models editing as branching, and
+ * a branch needs thread state the sidebar owns and does not hand out, so the
+ * earlier turn stays and the amended one is appended.
+ */
+const EditableUserMessage = Object.assign(function EditableUserMessage(props: UserMessageProps) {
+    return (
+        <CopilotChatUserMessage
+            {...props}
+            onEditMessage={({ message }) => {
+                const text = typeof message?.content === "string" ? message.content : "";
+                if (text) fillChatInput(text);
+            }}
+        />
+    );
+}, CopilotChatUserMessage);
+
 type MessageViewProps = React.ComponentProps<typeof CopilotChatMessageView>;
 
 /** Pass to the sidebar as its `messageView` slot. */
 export const SmoothMessageView = Object.assign(function SmoothView(props: MessageViewProps) {
-    return <CopilotChatMessageView {...props} assistantMessage={SmoothAssistantMessage} />;
+    return (
+        <CopilotChatMessageView
+            {...props}
+            assistantMessage={SmoothAssistantMessage}
+            userMessage={EditableUserMessage}
+        />
+    );
 }, CopilotChatMessageView);

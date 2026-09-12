@@ -9,7 +9,7 @@ import {
     useConfigureSuggestions,
     useFrontendTool,
 } from "@copilotkit/react-core/v2";
-import { ActionType, ConflictStatus } from "@repo/types";
+import { ActionType } from "@repo/types";
 import type { Conflict, Decision } from "@repo/types";
 import { ConflictCard } from "./conflict-card";
 
@@ -65,39 +65,18 @@ export function RegistryCopilot({
     const fingerprint = conflicts.map((one) => `${one.id}:${one.version}`).join(",");
 
     /**
-     * An empty chat gives no clue what it knows. These name the three things
-     * worth asking, and are written from the registry so the room in the second
-     * one is a room that actually decided something.
+     * An empty chat gives no clue what it knows. Pressing one of these types it
+     * into the box verbatim rather than sending, so the title and the message
+     * are the same words — what you press is what you get to edit.
      */
-    const room = decisions.find((decision) => !decision.supersededById)?.threadName;
-    const open = conflicts.find((conflict) => conflict.status === ConflictStatus.Open);
-
-    useConfigureSuggestions(
-        {
-            available: "before-first-message",
-            suggestions: [
-                {
-                    title: "Show me the open conflict",
-                    message: open
-                        ? `Show me the open conflict about ${open.a.subsystem}.`
-                        : "Show me the open conflict.",
-                },
-                {
-                    title: room ? `What did ${room} decide?` : "What has been decided?",
-                    message: room
-                        ? `What did ${room} decide, and does anything contradict it?`
-                        : "What has each room decided so far?",
-                },
-                {
-                    title: "Acknowledge this",
-                    message: open
-                        ? `Acknowledge the open conflict about ${open.a.subsystem}.`
-                        : "Acknowledge the conflict on screen.",
-                },
-            ],
-        },
-        [room, open?.id],
-    );
+    useConfigureSuggestions({
+        available: "before-first-message",
+        suggestions: [
+            { title: "Show me the open conflict", message: "Show me the open conflict" },
+            { title: "What did each room decide?", message: "What did each room decide?" },
+            { title: "What was finally decided?", message: "What was finally decided?" },
+        ],
+    });
 
     useAgentContext({
         description:
