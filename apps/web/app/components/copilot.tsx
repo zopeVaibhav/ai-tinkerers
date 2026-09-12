@@ -26,11 +26,34 @@ export function RegistryCopilot({
     decisions: Decision[];
     onAct: (conflictId: string, action: Draft) => Promise<void>;
 }) {
+    /**
+     * A conflict id is a cuid, and a model copies one wrong often enough that
+     * requiring it is the difference between the card rendering and the agent
+     * apologising. Every conflict therefore also answers to its position in the
+     * list, and a missing reference resolves to the only conflict there is.
+     */
+    const pick = (reference?: string): Conflict | undefined => {
+        if (reference) {
+            const byId = conflicts.find((one) => one.id === reference);
+            if (byId) return byId;
+
+            const index = Number(reference.trim()) - 1;
+            if (Number.isInteger(index) && conflicts[index]) return conflicts[index];
+        }
+        return conflicts.length === 1 ? conflicts[0] : conflicts[0];
+    };
+
     useAgentContext({
         description:
             "The contradiction registry. Every conversation thread gets an agent that records " +
             "what its room decided. Two rooms deciding opposite things about the same subsystem " +
-            "and condition is a conflict. Answer only from this data and never invent a decision.",
+            "and condition is a conflict. Answer only from this data and never invent a decision. " +
+            "Whenever your answer concerns a specific conflict, call showConflict first and then " +
+            "add at most two sentences — never describe a conflict in prose instead of showing it. " +
+            "Any conflict can be shown, resolved ones included. Pass its ref, or omit the argument " +
+            "to show the only one. When asked what was decided, read the resolution field: it is " +
+            "the answer. A superseded decision means that room later changed its own mind, which " +
+            "is not the same as that room losing the conflict.",
         value: {
             decisions: decisions.map((decision) => ({
                 id: decision.id,
@@ -40,10 +63,8 @@ export function RegistryCopilot({
                 said: decision.rawText,
                 superseded: Boolean(decision.supersededById),
             })),
-            howToShowAConflict:
-                "Call showConflict with the conflict id exactly as written below, or omit the " +
-                "id when there is only one.",
-            conflicts: conflicts.map((conflict) => ({
+            conflicts: conflicts.map((conflict, index) => ({
+                ref: String(index + 1),
                 id: conflict.id,
                 status: conflict.status,
                 subsystem: conflict.a.subsystem,
@@ -52,6 +73,9 @@ export function RegistryCopilot({
                     { room: conflict.a.threadName, action: conflict.a.action },
                     { room: conflict.b.threadName, action: conflict.b.action },
                 ],
+                acknowledgedBy: conflict.acknowledgedBy,
+                resolution: conflict.resolution,
+                timeline: conflict.timeline.map((entry) => `${entry.by}: ${entry.what}`),
             })),
         },
     });
@@ -59,18 +83,22 @@ export function RegistryCopilot({
     useFrontendTool({
         name: "showConflict",
         description:
-            "Show a conflict as a live card the person can act on. Prefer this over describing " +
-            "a conflict in words.",
+            "Show a conflict as a live card the person can act on. Always prefer this over " +
+            "describing a conflict in words. Works for open, seen and resolved conflicts alike.",
         parameters: z.object({
-            conflictId: z.string().describe("id of the conflict to show"),
+            ref: z
+                .string()
+                .optional()
+                .describe("the conflict's ref, such as \"1\". Omit to show the only conflict."),
         }),
-        handler: async ({ conflictId }) => {
-            const found = conflicts.find((one) => one.id === conflictId);
-            return found ? `showing ${found.a.threadName} vs ${found.b.threadName}` : "not found";
+        handler: async ({ ref }) => {
+            const found = pick(ref);
+            if (!found) return "the registry has no conflicts yet";
+            return `showing ${found.a.threadName} vs ${found.b.threadName}, status ${found.status}`;
         },
         render: ({ args }) => {
-            const conflict = conflicts.find((one) => one.id === args.conflictId);
-            if (!conflict) return <Muted>No conflict with that id.</Muted>;
+            const conflict = pick(args.ref);
+            if (!conflict) return <Muted>The registry has no conflicts yet.</Muted>;
             return (
                 <ConflictCard
                     conflict={conflict}
@@ -84,10 +112,15 @@ export function RegistryCopilot({
         name: "acknowledgeConflict",
         description: "Mark a conflict as seen. Only when the person asks for it.",
         parameters: z.object({
-            conflictId: z.string().describe("id of the conflict to acknowledge"),
+            ref: z
+                .string()
+                .optional()
+                .describe("the conflict's ref, such as \"1\". Omit for the only conflict."),
         }),
-        handler: async ({ conflictId }) => {
-            await onAct(conflictId, { type: ActionType.Acknowledge });
+        handler: async ({ ref }) => {
+            const found = pick(ref);
+            if (!found) return "the registry has no conflicts yet";
+            await onAct(found.id, { type: ActionType.Acknowledge });
             return "acknowledged";
         },
     });
