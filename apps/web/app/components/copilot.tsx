@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 // zod v3 on purpose: CopilotKit converts tool schemas with zod-to-json-schema,
 // which does not understand zod v4. The server stays on v4.
 import { z } from "zod";
@@ -27,21 +28,37 @@ export function RegistryCopilot({
     onAct: (conflictId: string, action: Draft) => Promise<void>;
 }) {
     /**
+     * The registry arrives over SSE, so this component first mounts with an
+     * empty list. useAgentContext takes no dependencies and re-reads on every
+     * render, so the agent sees conflicts as they land; useFrontendTool
+     * registers like an effect and keeps the closure it was handed, which was
+     * the empty one. Reading through a ref means a tool answers from the
+     * current registry whenever it happens to have been registered.
+     */
+    const latest = useRef(conflicts);
+    latest.current = conflicts;
+
+    /**
      * A conflict id is a cuid, and a model copies one wrong often enough that
      * requiring it is the difference between the card rendering and the agent
      * apologising. Every conflict therefore also answers to its position in the
-     * list, and a missing reference resolves to the only conflict there is.
+     * list, and a missing reference resolves to the newest conflict.
      */
     const pick = (reference?: string): Conflict | undefined => {
+        const list = latest.current;
+
         if (reference) {
-            const byId = conflicts.find((one) => one.id === reference);
+            const byId = list.find((one) => one.id === reference);
             if (byId) return byId;
 
             const index = Number(reference.trim()) - 1;
-            if (Number.isInteger(index) && conflicts[index]) return conflicts[index];
+            if (Number.isInteger(index) && list[index]) return list[index];
         }
-        return conflicts.length === 1 ? conflicts[0] : conflicts[0];
+        return list[0];
     };
+
+    /** Moves when a conflict appears or is acted on, not on every identical push. */
+    const fingerprint = conflicts.map((one) => `${one.id}:${one.version}`).join(",");
 
     useAgentContext({
         description:
@@ -80,50 +97,58 @@ export function RegistryCopilot({
         },
     });
 
-    useFrontendTool({
-        name: "showConflict",
-        description:
-            "Show a conflict as a live card the person can act on. Always prefer this over " +
-            "describing a conflict in words. Works for open, seen and resolved conflicts alike.",
-        parameters: z.object({
-            ref: z
-                .string()
-                .optional()
-                .describe("the conflict's ref, such as \"1\". Omit to show the only conflict."),
-        }),
-        handler: async ({ ref }) => {
-            const found = pick(ref);
-            if (!found) return "the registry has no conflicts yet";
-            return `showing ${found.a.threadName} vs ${found.b.threadName}, status ${found.status}`;
+    useFrontendTool(
+        {
+            name: "showConflict",
+            description:
+                "Show a conflict as a live card the person can act on. Always prefer this over " +
+                "describing a conflict in words. Works for open, seen and resolved conflicts alike.",
+            parameters: z.object({
+                ref: z
+                    .string()
+                    .optional()
+                    .describe('the conflict\'s ref, such as "1". Omit to show the only conflict.'),
+            }),
+            handler: async ({ ref }) => {
+                const found = pick(ref);
+                if (!found) return "the registry has no conflicts yet";
+                return `showing ${found.a.threadName} vs ${found.b.threadName}, status ${found.status}`;
+            },
+            render: ({ args }) => {
+                const conflict = pick(args.ref);
+                if (!conflict) return <Muted>The registry has no conflicts yet.</Muted>;
+                return (
+                    <ConflictCard
+                        conflict={conflict}
+                        onAcknowledge={() =>
+                            void onAct(conflict.id, { type: ActionType.Acknowledge })
+                        }
+                    />
+                );
+            },
         },
-        render: ({ args }) => {
-            const conflict = pick(args.ref);
-            if (!conflict) return <Muted>The registry has no conflicts yet.</Muted>;
-            return (
-                <ConflictCard
-                    conflict={conflict}
-                    onAcknowledge={() => void onAct(conflict.id, { type: ActionType.Acknowledge })}
-                />
-            );
-        },
-    });
+        [fingerprint],
+    );
 
-    useFrontendTool({
-        name: "acknowledgeConflict",
-        description: "Mark a conflict as seen. Only when the person asks for it.",
-        parameters: z.object({
-            ref: z
-                .string()
-                .optional()
-                .describe("the conflict's ref, such as \"1\". Omit for the only conflict."),
-        }),
-        handler: async ({ ref }) => {
-            const found = pick(ref);
-            if (!found) return "the registry has no conflicts yet";
-            await onAct(found.id, { type: ActionType.Acknowledge });
-            return "acknowledged";
+    useFrontendTool(
+        {
+            name: "acknowledgeConflict",
+            description: "Mark a conflict as seen. Only when the person asks for it.",
+            parameters: z.object({
+                ref: z
+                    .string()
+                    .optional()
+                    .describe('the conflict\'s ref, such as "1". Omit for the only conflict.'),
+            }),
+            handler: async ({ ref }) => {
+                const found = pick(ref);
+                if (!found) return "the registry has no conflicts yet";
+                await onAct(found.id, { type: ActionType.Acknowledge });
+                return "acknowledged";
+            },
         },
-    });
+        [fingerprint],
+    );
 
     return null;
 }
