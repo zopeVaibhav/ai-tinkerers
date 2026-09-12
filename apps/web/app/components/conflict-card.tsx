@@ -2,7 +2,9 @@
 
 import { ConflictStatus } from "@repo/types";
 import type { Conflict } from "@repo/types";
+import { motion } from "motion/react";
 import { STATUS_LABEL, STATUS_STYLE } from "../lib/display";
+import { EASE, riseIn } from "../lib/motion";
 
 /**
  * The conflict, small enough to sit inside a chat turn. Same object, same
@@ -16,7 +18,11 @@ export function ConflictCard({
     onAcknowledge: () => void;
 }) {
     return (
-        <div className="my-2 flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4">
+        <motion.div
+            {...riseIn}
+            transition={EASE}
+            className="my-2 flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4"
+        >
             <div className="flex items-center justify-between gap-2">
                 <span
                     className={`rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[conflict.status]}`}
@@ -48,11 +54,11 @@ export function ConflictCard({
             {conflict.status === ConflictStatus.Open && (
                 <button
                     onClick={onAcknowledge}
-                    className="self-start rounded-lg bg-neutral-900 px-3 py-1.5 text-xs text-white"
+                    className="cursor-pointer self-start rounded-lg bg-neutral-900 px-3 py-1.5 text-xs text-white"
                 >
                     Acknowledge
                 </button>
             )}
-        </div>
+        </motion.div>
     );
 }
