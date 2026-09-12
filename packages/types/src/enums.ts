@@ -4,6 +4,11 @@ export enum Surface {
     Web = "web",
 }
 
+/**
+ * How the same facts get worded, not who is allowed to do what. The agent
+ * writes one framing per value and each surface reads the one it needs.
+ * Capability is keyed on Surface instead — see core/permissions.
+ */
 export enum Audience {
     Engineer = "engineer",
     Lead = "lead",

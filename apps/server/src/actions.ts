@@ -1,5 +1,5 @@
 import { can, isValid } from "@repo/core";
-import { ActionType, Audience, Side } from "@repo/types";
+import { ActionType, Side, Surface } from "@repo/types";
 import type { Action, Conflict } from "@repo/types";
 import { getConflict, persist, supersede } from "./repository";
 
@@ -11,13 +11,13 @@ import { getConflict, persist, supersede } from "./repository";
 export async function act(
     conflictId: string,
     action: Action,
-    from: Audience,
+    from: Surface,
 ): Promise<Conflict | null> {
     const current = await getConflict(conflictId);
     if (!current) return null;
 
     if (!can(from, action.type)) {
-        console.log(`refused ${action.type} from ${from}: not allowed on that surface`);
+        console.log(`refused ${action.type} from ${from}: that surface cannot produce it`);
         return current;
     }
 

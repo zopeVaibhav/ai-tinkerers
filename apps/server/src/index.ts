@@ -1,9 +1,10 @@
 import cors from "cors";
 import express from "express";
-import { Audience } from "@repo/types";
+import { Surface } from "@repo/types";
 import type { Action, Conflict } from "@repo/types";
 import { ENABLED, ENV } from "./config/env";
 import { act } from "./actions";
+import { parseAction } from "./action-schema";
 import { getConflict, listConflicts, listDecisions, onChange, persist } from "./repository";
 import { record } from "./decisions";
 import { detect } from "./detect";
@@ -45,7 +46,10 @@ app.get("/stream", (req, res) => {
 });
 
 app.post("/conflicts/:id/action", async (req, res) => {
-    const conflict = await act(req.params.id, req.body as Action, Audience.Lead);
+    const action = parseAction(req.body);
+    if (!action) return res.status(400).json({ error: "malformed action" });
+
+    const conflict = await act(req.params.id, action, Surface.Web);
     if (!conflict) return res.status(404).json({ error: "no such conflict" });
     return res.json(conflict);
 });
@@ -135,6 +139,6 @@ app.listen(ENV.SERVER_PORT, async () => {
     }
 });
 
-function apply(conflictId: string, action: Action, from: Audience) {
+function apply(conflictId: string, action: Action, from: Surface) {
     return act(conflictId, action, from);
 }

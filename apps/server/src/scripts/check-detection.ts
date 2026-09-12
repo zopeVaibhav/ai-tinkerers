@@ -1,12 +1,4 @@
-import {
-    ActionType,
-    ClaimAction,
-    Audience,
-    Condition,
-    Side,
-    Subsystem,
-    Surface,
-} from "@repo/types";
+import { ActionType, ClaimAction, Condition, Side, Subsystem, Surface } from "@repo/types";
 import { createDecision, listConflicts, listDecisions } from "../repository";
 import { act } from "../actions";
 import { detect } from "../detect";
@@ -61,14 +53,14 @@ if (!conflict) {
 const acked = await act(
     conflict.id,
     { type: ActionType.Acknowledge, by: "vaibhav" },
-    Audience.Lead,
+    Surface.Slack,
 );
 line("acknowledging moves it out of open", acked?.status === "acknowledged", acked?.status);
 
 const engineerNote = await act(
     conflict.id,
     { type: ActionType.Note, by: "himanshu", text: "from a phone" },
-    Audience.Engineer,
+    Surface.Telegram,
 );
 line("a phone cannot leave a note", engineerNote?.timeline.length === acked?.timeline.length);
 
@@ -80,7 +72,7 @@ const resolved = await act(
         winner: Side.A,
         note: "mobile is right, cap at 3",
     },
-    Audience.Lead,
+    Surface.Slack,
 );
 line("superseding resolves it", resolved?.status === "resolved", resolved?.status);
 
