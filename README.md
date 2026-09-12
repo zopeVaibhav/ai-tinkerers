@@ -21,28 +21,34 @@ decide opposite things about the same subsystem both threads get told. Read
 
 ## Surfaces
 
-| Surface        | Audience | Renders                               | Raises issues             |
-| -------------- | -------- | ------------------------------------- | ------------------------- |
-| Slack channel  | lead     | full Block Kit card, modals, timeline | yes, via `@mention`       |
-| Telegram group | engineer | one line, one decision, two buttons   | no                        |
-| Telegram DM    | customer | one sentence, no controls             | yes, by messaging the bot |
-| Web            | lead     | editable canvas, all three framings   | yes, via the inbound box  |
+| Surface        | Framing  | Renders                               | Can produce                           | Records decisions      |
+| -------------- | -------- | ------------------------------------- | ------------------------------------- | ---------------------- |
+| Slack thread   | lead     | full Block Kit card, modals, timeline | acknowledge, resolve, supersede, note | yes, by talking in one |
+| Telegram group | engineer | one line, one decision, two buttons   | acknowledge                           | no                     |
+| Web            | both     | canvas, both framings side by side    | acknowledge, resolve, supersede, note | no                     |
+
+Two separate axes, easy to confuse. **Framing** is how the agent words the same
+facts for that window. **Can produce** is what that window is physically able to
+send — Slack has modals, so it can carry the text superseding needs; a Telegram
+callback is 64 bytes with nowhere to type. Neither axis knows who is looking:
+two people in one thread share one window and have identical capability.
 
 ## Rules that keep the design honest
 
 1. Nothing travels sideways. No Slack-to-Telegram wire. Every surface talks only
    to the object.
 2. Every inbound event is normalised into one `Action` before it touches the store.
-3. Capability belongs to the window, not the person. Enforced twice: the renderer
-   does not draw the control, and `apply()` refuses the action.
+3. Capability belongs to the window, not the person — keyed on `Surface`, never on
+   seniority. Enforced twice: the renderer does not draw the control, and `act()`
+   refuses the action before it reaches the store.
 4. The subscription table maps one object id to every live view of it.
 5. Renderers are pure functions. Object in, that platform's markup out. Never a
    model call.
 
 ## The agent
 
-Three jobs, all text-only: read an unstructured report into facts, write the same
-facts once per audience, and propose the next move. It never touches fan-out,
+Two jobs, both text-only: read a thread into a structured claim, and write the
+same facts once per framing. It never touches fan-out,
 transport or the subscription table — those stay deterministic. A failed model
 call logs and skips; the rest keeps working.
 
