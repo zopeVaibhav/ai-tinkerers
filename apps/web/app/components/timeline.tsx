@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { ActionType } from "@repo/types";
 import type { TimelineEntry } from "@repo/types";
 import { fullTime } from "../lib/display";
+import { EASE, fade } from "../lib/motion";
 
 /** Rows added each time the reader reaches the bottom. */
 const PAGE = 30;
@@ -219,7 +221,7 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
                             setTypes([]);
                             setPeople([]);
                         }}
-                        className="shrink-0 rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-50"
+                        className="shrink-0 cursor-pointer rounded-lg border border-neutral-300 px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-50"
                     >
                         Clear
                     </button>
@@ -241,10 +243,12 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
                     {shown.map(({ entry, type, index }) => {
                         const expanded = open.includes(index);
                         return (
-                            <li
+                            <motion.li
                                 key={index}
+                                {...fade}
+                                transition={EASE}
                                 onClick={() => toggle(open, index, setOpen)}
-                                className="@lg:grid @lg:grid-cols-[7rem_10rem_1fr] @lg:gap-3 flex cursor-default flex-col gap-1 border-t border-neutral-100 px-3 py-2 text-sm hover:bg-neutral-50"
+                                className="@lg:grid @lg:grid-cols-[7rem_10rem_1fr] @lg:gap-3 flex cursor-pointer flex-col gap-1 border-t border-neutral-100 px-3 py-2 text-sm hover:bg-neutral-50"
                             >
                                 <div className="flex items-center gap-2">
                                     <span
@@ -268,7 +272,7 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
                                     <span className="px-1.5 text-neutral-300">·</span>
                                     <span className="text-neutral-700">{entry.what}</span>
                                 </div>
-                            </li>
+                            </motion.li>
                         );
                     })}
                 </ol>
@@ -322,7 +326,7 @@ function Filter<T extends string>({
         <div ref={wrapper} className="relative shrink-0">
             <button
                 onClick={() => setOpen((was) => !was)}
-                className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm ${
+                className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-sm ${
                     selected.length > 0
                         ? "border-neutral-900 bg-neutral-900 text-white"
                         : "border-neutral-300 text-neutral-600 hover:bg-neutral-50"
@@ -337,31 +341,38 @@ function Filter<T extends string>({
                 <span className="text-xs opacity-60">▾</span>
             </button>
 
-            {open && (
-                <div className="absolute right-0 z-20 mt-1 max-h-64 w-52 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-1 shadow-lg">
-                    {selected.length > 0 && (
-                        <button
-                            onClick={onClear}
-                            className="w-full rounded-md px-2 py-1.5 text-left text-xs text-neutral-500 hover:bg-neutral-50"
-                        >
-                            Clear {label.toLowerCase()}
-                        </button>
-                    )}
-                    {options.map((option) => (
-                        <label
-                            key={option}
-                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-neutral-50"
-                        >
-                            <input
-                                type="checkbox"
-                                checked={selected.includes(option)}
-                                onChange={() => onToggle(option)}
-                            />
-                            <span className="truncate text-neutral-700">{option}</span>
-                        </label>
-                    ))}
-                </div>
-            )}
+            {/* Shorter than EASE: the cursor is already travelling to an option as the menu opens. */}
+            <AnimatePresence>
+                {open && (
+                    <motion.div
+                        {...fade}
+                        transition={{ ...EASE, duration: 0.12 }}
+                        className="absolute right-0 z-20 mt-1 max-h-64 w-52 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-1 shadow-lg"
+                    >
+                        {selected.length > 0 && (
+                            <button
+                                onClick={onClear}
+                                className="w-full cursor-pointer rounded-md px-2 py-1.5 text-left text-xs text-neutral-500 hover:bg-neutral-50"
+                            >
+                                Clear {label.toLowerCase()}
+                            </button>
+                        )}
+                        {options.map((option) => (
+                            <label
+                                key={option}
+                                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-neutral-50"
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={selected.includes(option)}
+                                    onChange={() => onToggle(option)}
+                                />
+                                <span className="truncate text-neutral-700">{option}</span>
+                            </label>
+                        ))}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

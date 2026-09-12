@@ -9,7 +9,7 @@ import {
     useConfigureSuggestions,
     useFrontendTool,
 } from "@copilotkit/react-core/v2";
-import { ActionType } from "@repo/types";
+import { ActionType, ConflictStatus } from "@repo/types";
 import type { Conflict, Decision } from "@repo/types";
 import { ConflictCard } from "./conflict-card";
 
@@ -21,15 +21,23 @@ type Draft = { type: ActionType; [key: string]: unknown };
  * Both tools route through the same POST the buttons use, so the guard and the
  * permission check still apply. If this wrote to the database directly, the web
  * surface would quietly become a different product from the other two.
+ *
+ * `conflicts` is the agent's whole world: it can only answer about, show, or
+ * acknowledge what is in that array. A conflict's own page passes just that
+ * conflict, which is the difference between "acknowledge this" meaning the one
+ * on screen and it meaning whichever conflict happens to sort first.
  */
 export function RegistryCopilot({
     conflicts,
     decisions,
     onAct,
+    scoped = false,
 }: {
     conflicts: Conflict[];
     decisions: Decision[];
     onAct: (conflictId: string, action: Draft) => Promise<void>;
+    /** True when `conflicts` is one conflict's page rather than the registry. */
+    scoped?: boolean;
 }) {
     /**
      * The registry arrives over SSE, so this component first mounts with an
@@ -69,17 +77,45 @@ export function RegistryCopilot({
      * into the box verbatim rather than sending, so the title and the message
      * are the same words — what you press is what you get to edit.
      */
-    useConfigureSuggestions({
-        available: "before-first-message",
-        suggestions: [
-            { title: "Show me the open conflict", message: "Show me the open conflict" },
-            { title: "What did each room decide?", message: "What did each room decide?" },
-            { title: "What was finally decided?", message: "What was finally decided?" },
-        ],
-    });
+    const only = scoped ? conflicts[0] : undefined;
+
+    useConfigureSuggestions(
+        {
+            available: "before-first-message",
+            // Title and message are the same words: pressing one types it into the
+            // composer rather than sending, so what you press is what you edit.
+            suggestions: only
+                ? [
+                      { title: "Show me this conflict", message: "Show me this conflict" },
+                      { title: "Why do these clash?", message: "Why do these clash?" },
+                      only.status === ConflictStatus.Open
+                          ? { title: "Acknowledge this", message: "Acknowledge this" }
+                          : { title: "What was decided?", message: "What was decided?" },
+                  ]
+                : [
+                      {
+                          title: "Show me the open conflict",
+                          message: "Show me the open conflict",
+                      },
+                      {
+                          title: "What did each room decide?",
+                          message: "What did each room decide?",
+                      },
+                      { title: "What was finally decided?", message: "What was finally decided?" },
+                  ],
+        },
+        [only?.id, only?.status],
+    );
 
     useAgentContext({
         description:
+            (only
+                ? `You are on the page for one conflict: ${only.a.threadName} versus ` +
+                  `${only.b.threadName}, on ${only.a.subsystem} / ${only.a.condition}. It is the ` +
+                  "only conflict you can see or act on, and every question is about it unless the " +
+                  "person plainly says otherwise. If they ask about a different conflict, say it " +
+                  "is not on this page and that the registry lists the rest. "
+                : "") +
             "The contradiction registry. Every conversation thread gets an agent that records " +
             "what its room decided. Two rooms deciding opposite things about the same subsystem " +
             "and condition is a conflict. Answer only from this data and never invent a decision. " +
@@ -88,7 +124,11 @@ export function RegistryCopilot({
             "Any conflict can be shown, resolved ones included. Pass its ref, or omit the argument " +
             "to show the only one. When asked what was decided, read the resolution field: it is " +
             "the answer. A superseded decision means that room later changed its own mind, which " +
-            "is not the same as that room losing the conflict.",
+            "is not the same as that room losing the conflict. " +
+            "You can show a conflict and you can acknowledge one. You cannot add a note, resolve " +
+            "a conflict, or pick which side wins — there is no tool for any of those. If asked " +
+            "for one, say plainly that you cannot and point at the controls on the card. Never " +
+            "report having done something you had no tool to do.",
         value: {
             decisions: decisions.map((decision) => ({
                 id: decision.id,

@@ -1,67 +1,36 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { ConflictStatus } from "@repo/types";
-import type { Action, Conflict, Decision } from "@repo/types";
 import { ConflictList, StatusFilter } from "./components/conflict-list";
-import { ConflictDetail } from "./components/conflict-detail";
+import { ConflictGrid } from "./components/conflict-grid";
 import { DecisionList } from "./components/decision-list";
-import { RegistryCopilot } from "./components/copilot";
-import { CopilotSidebar } from "@copilotkit/react-core/v2";
+import { RegistryHeader } from "./components/registry-header";
 import { STATUS_ORDER, haystack } from "./lib/display";
-import { mockRegistry } from "./lib/fixtures";
-import { SmoothMessageView } from "./components/smooth-chat";
-import { ChatWelcome } from "./components/chat-welcome";
-import { ChatHeader, ChatInput, NoToggleButton } from "./components/chat-chrome";
-import { useDesktop } from "./lib/use-desktop";
-import { SuggestionsToInput } from "./components/chat-suggestions";
+import {
+    ConflictGridSkeleton,
+    ConflictListSkeleton,
+    DecisionListSkeleton,
+} from "./components/skeleton";
+import { EASE, fade } from "./lib/motion";
+import { useRegistry } from "./lib/use-registry";
 
-const SERVER = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:5101";
+type View = "cards" | "list";
 
-/** Build the UI without a server: `NEXT_PUBLIC_MOCK=1 bun run dev`. */
-const MOCK = process.env.NEXT_PUBLIC_MOCK === "1";
-
-type Draft<T> = T extends unknown ? Omit<T, "by"> : never;
-type Link = "connecting" | "live" | "dropped" | "mock";
-
+/**
+ * The index. It answers one question — what is unresolved — and then hands off.
+ *
+ * A conflict is read on its own page rather than in a panel beside the list,
+ * because the thing being read is a shared object: it has to have an address
+ * that can be pasted back into the thread it came from.
+ */
 export default function Page() {
-    const [conflicts, setConflicts] = useState<Conflict[]>([]);
-    const [decisions, setDecisions] = useState<Decision[]>([]);
+    const { conflicts, decisions, link, loading, name, rename } = useRegistry();
     const [tab, setTab] = useState<"conflicts" | "decisions">("conflicts");
-    const [link, setLink] = useState<Link>("connecting");
-    const [selected, setSelected] = useState<string | null>(null);
+    const [view, setView] = useState<View>("cards");
     const [status, setStatus] = useState<ConflictStatus | "all">("all");
     const [query, setQuery] = useState("");
-    const [name, setName] = useState("");
-    const [chatOpen, setChatOpen] = useState(false);
-    const desktop = useDesktop();
-    const detail = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        setName(localStorage.getItem("name") ?? "");
-
-        if (MOCK) {
-            const registry = mockRegistry();
-            setConflicts(registry.conflicts);
-            setDecisions(registry.decisions);
-            setLink("mock");
-            return;
-        }
-
-        const source = new EventSource(`${SERVER}/stream`);
-        source.onopen = () => setLink("live");
-        source.onerror = () => setLink("dropped");
-        source.onmessage = (event) => {
-            setLink("live");
-            const payload = JSON.parse(event.data) as {
-                conflicts: Conflict[];
-                decisions: Decision[];
-            };
-            setConflicts(payload.conflicts ?? []);
-            setDecisions(payload.decisions ?? []);
-        };
-        return () => source.close();
-    }, []);
 
     const counts = useMemo(() => {
         const tally: Record<string, number> = { all: conflicts.length };
@@ -80,144 +49,76 @@ export default function Page() {
         });
     }, [conflicts, status, query]);
 
-    const conflict = useMemo(
-        () => visible.find((one) => one.id === selected) ?? visible[0] ?? null,
-        [visible, selected],
-    );
-
-    /**
-     * Side by side the detail is already in view. Stacked, it sits under the
-     * whole list, so tapping a card would otherwise look like nothing happened.
-     */
-    function choose(id: string) {
-        setSelected(id);
-        if (desktop) return;
-        requestAnimationFrame(() => {
-            const node = detail.current;
-            if (!node) return;
-            // scrollTo rather than scrollIntoView: the latter is a no-op in some
-            // embedded views, and this needs an offset above the card anyway.
-            window.scrollTo({ top: node.getBoundingClientRect().top + window.scrollY - 12 });
-        });
-    }
-
-    function rename(value: string) {
-        setName(value);
-        localStorage.setItem("name", value);
-    }
-
-    /** One write path for the panel, the buttons and the agent alike. */
-    async function send(conflictId: string, action: Record<string, unknown>) {
-        if (MOCK) {
-            console.warn("mock mode: no server, action not sent", conflictId, action);
-            return;
-        }
-        await fetch(`${SERVER}/conflicts/${conflictId}/action`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...action, by: name || "web" }),
-        });
-    }
-
-    async function act(action: Draft<Action>) {
-        if (!conflict) return;
-        await send(conflict.id, action as unknown as Record<string, unknown>);
-    }
-
     return (
-        <main
-            /* Sides and bottom set separately: `sm:p-8` and `pb-24` carry the same
-               specificity, so the shorthand wins and the clearance is lost. */
-            className={`mx-auto flex max-w-6xl flex-col gap-6 px-4 pt-4 sm:px-8 sm:pt-8 ${
-                desktop ? "pb-4 sm:pb-8" : "pb-24"
-            }`}
-        >
-            <RegistryCopilot
-                conflicts={conflicts}
-                decisions={decisions}
-                onAct={(conflictId, action) => send(conflictId, action)}
-            />
-            {/*
-             * Side by side, the copilot is part of the screen: always open, with
-             * nothing offering to close it. On a phone it can only be full screen,
-             * so there it has to be dismissable — otherwise the registry is
-             * unreachable. The controls come back with it.
-             */}
-            <CopilotSidebar
-                width={desktop ? "30%" : "100%"}
-                open={desktop || chatOpen}
-                onOpenChange={setChatOpen}
-                suggestionView={SuggestionsToInput}
-                input={ChatInput}
-                messageView={SmoothMessageView}
-                welcomeScreen={ChatWelcome}
-                {...(desktop ? { header: ChatHeader, toggleButton: NoToggleButton } : {})}
-            />
-            <header className="flex flex-wrap items-baseline justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-medium">Contradiction registry</h1>
-                    <p className="text-sm text-neutral-500">
-                        Decisions that cannot both be true, found across threads nobody shares.
-                    </p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <span
-                        className={`text-xs ${
-                            link === "live"
-                                ? "text-emerald-600"
-                                : link === "dropped"
-                                  ? "text-red-600"
-                                  : link === "mock"
-                                    ? "text-amber-600"
-                                    : "text-neutral-400"
-                        }`}
-                    >
-                        {link}
-                    </span>
-                    <input
-                        value={name}
-                        onChange={(event) => rename(event.target.value)}
-                        placeholder="your name"
-                        className="w-36 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm"
-                    />
-                </div>
-            </header>
+        <main className="mx-auto flex max-w-6xl flex-col gap-6 p-4 sm:p-8">
+            <RegistryHeader link={link} name={name} onRename={rename} />
 
-            <div className="flex gap-1">
+            <div className="flex flex-wrap items-center gap-1">
                 <Tab active={tab === "conflicts"} onClick={() => setTab("conflicts")}>
                     Contradictions {conflicts.length}
                 </Tab>
                 <Tab active={tab === "decisions"} onClick={() => setTab("decisions")}>
                     Recorded decisions {decisions.length}
                 </Tab>
+
+                {tab === "conflicts" && (
+                    <div className="ml-auto flex gap-1">
+                        <ViewButton active={view === "cards"} onClick={() => setView("cards")}>
+                            Cards
+                        </ViewButton>
+                        <ViewButton active={view === "list"} onClick={() => setView("list")}>
+                            List
+                        </ViewButton>
+                    </div>
+                )}
             </div>
 
-            {tab === "decisions" ? (
-                <DecisionList decisions={decisions} />
-            ) : (
-                <>
-                    <div className="flex flex-wrap items-center gap-3">
-                        <StatusFilter value={status} counts={counts} onChange={setStatus} />
-                        <input
-                            value={query}
-                            onChange={(event) => setQuery(event.target.value)}
-                            placeholder="search threads, subsystems, people"
-                            className="min-w-56 flex-1 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm"
-                        />
-                    </div>
-
-                    <div className="grid gap-6 lg:grid-cols-[22rem_1fr]">
-                        <ConflictList
-                            conflicts={visible}
-                            selectedId={conflict?.id ?? null}
-                            onSelect={choose}
-                        />
-                        <div ref={detail} className="scroll-mt-4">
-                            {conflict && <ConflictDetail conflict={conflict} onAct={act} />}
+            <AnimatePresence mode="wait" initial={false}>
+                {tab === "decisions" ? (
+                    <motion.div key="decisions" {...fade} transition={EASE}>
+                        {loading ? (
+                            <DecisionListSkeleton />
+                        ) : (
+                            <DecisionList decisions={decisions} />
+                        )}
+                    </motion.div>
+                ) : (
+                    <motion.div
+                        key="conflicts"
+                        className="flex flex-col gap-6"
+                        {...fade}
+                        transition={EASE}
+                    >
+                        <div className="flex flex-wrap items-center gap-3">
+                            <StatusFilter value={status} counts={counts} onChange={setStatus} />
+                            <input
+                                value={query}
+                                onChange={(event) => setQuery(event.target.value)}
+                                placeholder="search threads, subsystems, people"
+                                className="min-w-56 flex-1 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm"
+                            />
                         </div>
-                    </div>
-                </>
-            )}
+
+                        {/* The two views hold the same rows in a different shape, so they
+                            swap in place rather than crossing over one another. */}
+                        <AnimatePresence mode="wait" initial={false}>
+                            <motion.div key={view} {...fade} transition={EASE}>
+                                {loading ? (
+                                    view === "cards" ? (
+                                        <ConflictGridSkeleton />
+                                    ) : (
+                                        <ConflictListSkeleton />
+                                    )
+                                ) : view === "cards" ? (
+                                    <ConflictGrid conflicts={visible} />
+                                ) : (
+                                    <ConflictList conflicts={visible} />
+                                )}
+                            </motion.div>
+                        </AnimatePresence>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </main>
     );
 }
@@ -234,10 +135,33 @@ function Tab({
     return (
         <button
             onClick={onClick}
-            className={`rounded-lg px-3 py-1.5 text-sm ${
+            className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm ${
                 active
                     ? "bg-neutral-900 text-white"
                     : "border border-neutral-300 text-neutral-600 hover:bg-neutral-50"
+            }`}
+        >
+            {children}
+        </button>
+    );
+}
+
+function ViewButton({
+    active,
+    onClick,
+    children,
+}: {
+    active: boolean;
+    onClick: () => void;
+    children: React.ReactNode;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            className={`cursor-pointer rounded-lg px-3 py-1.5 text-xs ${
+                active
+                    ? "border border-neutral-900 text-neutral-900"
+                    : "border border-neutral-200 text-neutral-500 hover:bg-neutral-50"
             }`}
         >
             {children}
