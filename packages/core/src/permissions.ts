@@ -23,6 +23,9 @@ const ALLOWED: Record<Surface, ActionType[]> = {
     // The browser can type, so it can produce everything. Note that the HTTP
     // endpoint behind this is unauthenticated — membership of a Slack workspace
     // or Telegram group is the only gate the other two surfaces get for free.
+    //
+    // Resolve is granted but currently unsent: superseding is what resolves a
+    // conflict. It stays here so wiring a Resolve control later needs no change.
     [Surface.Web]: [
         ActionType.Acknowledge,
         ActionType.Resolve,
@@ -31,9 +34,12 @@ const ALLOWED: Record<Surface, ActionType[]> = {
     ],
 };
 
-/** Written by the agent, not by a person, so no window owns it. */
-const SYSTEM: ActionType[] = [ActionType.Reframe];
-
+/**
+ * Reframe is absent on purpose. The agent writes framings through `persist`
+ * rather than `act`, because no window produced it and there is no surface to
+ * ask about. If a Reframe ever needs to arrive from a person, give it a row
+ * here rather than an exemption.
+ */
 export function can(surface: Surface, action: ActionType): boolean {
-    return SYSTEM.includes(action) || ALLOWED[surface].includes(action);
+    return ALLOWED[surface].includes(action);
 }

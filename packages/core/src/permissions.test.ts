@@ -21,9 +21,9 @@ describe("can", () => {
         expect(can(Surface.Telegram, ActionType.Resolve)).toBe(false);
     });
 
-    test("reframe belongs to the agent, so every surface carries it", () => {
+    test("no surface can produce a reframe: the agent does not come through here", () => {
         for (const surface of Object.values(Surface)) {
-            expect(can(surface, ActionType.Reframe)).toBe(true);
+            expect(can(surface, ActionType.Reframe)).toBe(false);
         }
     });
 });
