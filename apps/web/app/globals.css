@@ -1,1 +1,25 @@
 @import "tailwindcss";
+
+/**
+ * The chat panel floats over the registry instead of pushing it: CopilotKit
+ * puts a margin on <body> equal to the panel width, which reflows the whole
+ * page every time the panel opens. The panel is an overlay, so the page behind
+ * it should not move at all.
+ *
+ * Width follows the viewport rather than being a constant, and under 768px
+ * CopilotKit's own full-screen overlay is already right, so this leaves it be.
+ */
+:root {
+    --copilot-panel: clamp(22rem, 34vw, 36rem);
+}
+
+body {
+    margin-right: 0 !important;
+}
+
+@media (min-width: 768px) {
+    aside[data-copilot-sidebar] {
+        --sidebar-width: var(--copilot-panel) !important;
+        width: var(--copilot-panel) !important;
+    }
+}

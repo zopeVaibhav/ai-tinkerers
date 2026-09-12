@@ -28,6 +28,9 @@ const INCLUDE = {
     decisionA: true,
     decisionB: true,
     timeline: { orderBy: { at: "asc" } },
+    // surface and audience only: the identifiers are for fan-out, not for a reader,
+    // and a Telegram chatId is a BigInt that would not survive JSON.
+    views: { select: { surface: true, audience: true } },
 } as const;
 
 export type NewDecision = {
@@ -214,6 +217,7 @@ function toConflict(row: {
     decisionA: DecisionRow;
     decisionB: DecisionRow;
     timeline: { at: Date; by: string; what: string }[];
+    views: { surface: string; audience: string }[];
 }): Conflict {
     return {
         id: row.id,
@@ -229,6 +233,10 @@ function toConflict(row: {
             at: entry.at.toISOString(),
             by: entry.by,
             what: entry.what,
+        })),
+        views: row.views.map((view) => ({
+            surface: view.surface as Surface,
+            audience: view.audience as Audience,
         })),
     };
 }

@@ -3,7 +3,8 @@
 import { ActionType, Audience, ConflictStatus, Side } from "@repo/types";
 import type { Action, Conflict, Decision } from "@repo/types";
 import { Btn, Prompt } from "./controls";
-import { STATUS_LABEL, STATUS_STYLE, SURFACE_LABEL, fullTime } from "../lib/display";
+import { STATUS_LABEL, STATUS_STYLE, SURFACE_LABEL, fullTime, surfacesFor } from "../lib/display";
+import { Timeline } from "./timeline";
 
 type Draft<T> = T extends unknown ? Omit<T, "by"> : never;
 
@@ -17,13 +18,25 @@ export function ConflictDetail({
     return (
         <div className="flex flex-col gap-5">
             <section className="flex flex-col gap-4 rounded-xl border border-neutral-200 bg-white p-5">
-                <div className="flex flex-wrap items-center gap-3 text-sm">
-                    <span className={`rounded-full px-3 py-1 ${STATUS_STYLE[conflict.status]}`}>
+                {/* What this clash is about on the left, where it came from on the
+                    right. One grey run of dot-separated facts read as clutter. */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+                    <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[conflict.status]}`}
+                    >
                         {STATUS_LABEL[conflict.status]}
                     </span>
-                    <span className="text-neutral-500">
-                        {conflict.a.subsystem} · {conflict.a.condition} · found{" "}
-                        {fullTime(conflict.createdAt)} · v{conflict.version}
+                    <span>
+                        <span className="font-medium text-neutral-900">{conflict.a.subsystem}</span>
+                        <span className="text-neutral-400"> on </span>
+                        <code className="text-xs text-neutral-700">{conflict.a.condition}</code>
+                    </span>
+                    <span className="ml-auto text-xs text-neutral-400">
+                        found{" "}
+                        <span className="font-medium text-neutral-600">
+                            {fullTime(conflict.createdAt)}
+                        </span>{" "}
+                        · v{conflict.version}
                     </span>
                 </div>
 
@@ -83,8 +96,11 @@ export function ConflictDetail({
                     <div className="grid gap-4 sm:grid-cols-2">
                         {Object.values(Audience).map((audience) => (
                             <div key={audience} className="flex flex-col gap-1">
-                                <span className="text-xs uppercase tracking-wide text-neutral-400">
-                                    {audience}
+                                <span className="text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                                    {/* The surface is the useful label. The audience name only
+                                        stands in when that reader has no window open — with a
+                                        surface disabled there would otherwise be nothing here. */}
+                                    {surfacesFor(conflict, audience).join(", ") || audience}
                                 </span>
                                 <p className="text-sm text-neutral-700">
                                     {conflict.framings[audience] ?? "—"}
@@ -95,20 +111,7 @@ export function ConflictDetail({
                 </section>
             )}
 
-            <section className="flex flex-col gap-2 rounded-xl border border-neutral-200 bg-white p-5">
-                <h2 className="text-sm font-medium text-neutral-500">Timeline</h2>
-                {conflict.timeline.length === 0 && (
-                    <p className="text-sm text-neutral-400">nobody has looked at this yet</p>
-                )}
-                <ol className="flex flex-col gap-1 text-sm">
-                    {conflict.timeline.map((entry, index) => (
-                        <li key={index} className="text-neutral-700">
-                            <span className="text-neutral-400">{fullTime(entry.at)}</span>{" "}
-                            <span className="font-medium">{entry.by}</span> {entry.what}
-                        </li>
-                    ))}
-                </ol>
-            </section>
+            <Timeline entries={conflict.timeline} />
         </div>
     );
 }

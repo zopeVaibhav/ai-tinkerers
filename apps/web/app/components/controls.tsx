@@ -45,7 +45,7 @@ export function Prompt({
     if (!open) return <Btn onClick={() => setOpen(true)}>{label}</Btn>;
 
     return (
-        <span className="flex gap-2">
+        <span className="flex w-full gap-2 sm:w-auto">
             <input
                 autoFocus
                 value={value}
@@ -55,7 +55,7 @@ export function Prompt({
                     if (event.key === "Escape") setOpen(false);
                 }}
                 placeholder={placeholder}
-                className="rounded-lg border border-neutral-300 px-3 py-2 text-sm"
+                className="min-w-0 flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm sm:flex-none"
             />
             <Btn tone="solid" onClick={submit}>
                 {label}
