@@ -73,58 +73,38 @@ export function RegistryCopilot({
     const fingerprint = conflicts.map((one) => `${one.id}:${one.version}`).join(",");
 
     /**
-     * An empty chat gives no clue what it knows. These name the three things
-     * worth asking, and are written from the registry so the room in the second
-     * one is a room that actually decided something.
+     * An empty chat gives no clue what it knows. Pressing one of these types it
+     * into the box verbatim rather than sending, so the title and the message
+     * are the same words — what you press is what you get to edit.
      */
-    const room = decisions.find((decision) => !decision.supersededById)?.threadName;
-    const open = conflicts.find((conflict) => conflict.status === ConflictStatus.Open);
-
     const only = scoped ? conflicts[0] : undefined;
 
     useConfigureSuggestions(
         {
             available: "before-first-message",
+            // Title and message are the same words: pressing one types it into the
+            // composer rather than sending, so what you press is what you edit.
             suggestions: only
                 ? [
-                      { title: "Show me this conflict", message: "Show me this conflict." },
-                      {
-                          title: "Why do these clash?",
-                          message: `Why can ${only.a.threadName} and ${only.b.threadName} not both be right about ${only.a.condition}?`,
-                      },
-                      {
-                          title:
-                              only.status === ConflictStatus.Open
-                                  ? "Acknowledge this"
-                                  : "What was decided?",
-                          message:
-                              only.status === ConflictStatus.Open
-                                  ? "Acknowledge this conflict."
-                                  : "What was decided here, and who decided it?",
-                      },
+                      { title: "Show me this conflict", message: "Show me this conflict" },
+                      { title: "Why do these clash?", message: "Why do these clash?" },
+                      only.status === ConflictStatus.Open
+                          ? { title: "Acknowledge this", message: "Acknowledge this" }
+                          : { title: "What was decided?", message: "What was decided?" },
                   ]
                 : [
                       {
                           title: "Show me the open conflict",
-                          message: open
-                              ? `Show me the open conflict about ${open.a.subsystem}.`
-                              : "Show me the open conflict.",
+                          message: "Show me the open conflict",
                       },
                       {
-                          title: room ? `What did ${room} decide?` : "What has been decided?",
-                          message: room
-                              ? `What did ${room} decide, and does anything contradict it?`
-                              : "What has each room decided so far?",
+                          title: "What did each room decide?",
+                          message: "What did each room decide?",
                       },
-                      {
-                          title: "Acknowledge this",
-                          message: open
-                              ? `Acknowledge the open conflict about ${open.a.subsystem}.`
-                              : "Acknowledge the conflict on screen.",
-                      },
+                      { title: "What was finally decided?", message: "What was finally decided?" },
                   ],
         },
-        [room, open?.id, only?.id, only?.status],
+        [only?.id, only?.status],
     );
 
     useAgentContext({

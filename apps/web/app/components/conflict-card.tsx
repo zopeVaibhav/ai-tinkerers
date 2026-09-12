@@ -21,6 +21,9 @@ export function ConflictCard({
         <motion.div
             {...riseIn}
             transition={EASE}
+            /* A hook for the message chrome: a turn that is a card has nothing
+               for the copy button to copy. */
+            data-conflict-card=""
             className="my-2 flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4"
         >
             <div className="flex items-center justify-between gap-2">

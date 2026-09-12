@@ -4,6 +4,8 @@ import { CopilotChat } from "@copilotkit/react-core/v2";
 import { CopilotKitKite } from "./copilotkit-kite";
 import { SmoothMessageView } from "./smooth-chat";
 import { ChatWelcome } from "./chat-welcome";
+import { SuggestionsToInput } from "./chat-suggestions";
+import { ChatInput } from "./chat-input";
 
 /**
  * The chat as a column of the page rather than a panel floating over it.
@@ -25,7 +27,12 @@ export function ChatPanel() {
             {/* min-h-0: without it a flex child refuses to shrink below its content,
                 so the message list grows the page instead of scrolling itself. */}
             <div className="min-h-0 flex-1">
-                <CopilotChat messageView={SmoothMessageView} welcomeScreen={ChatWelcome} />
+                <CopilotChat
+                    messageView={SmoothMessageView}
+                    welcomeScreen={ChatWelcome}
+                    suggestionView={SuggestionsToInput}
+                    input={ChatInput}
+                />
             </div>
         </aside>
     );

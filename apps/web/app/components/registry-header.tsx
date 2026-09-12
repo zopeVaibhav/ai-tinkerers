@@ -32,18 +32,44 @@ export function RegistryHeader({
 
     return (
         <header className="flex flex-wrap items-baseline justify-between gap-4">
-            <div>
-                {back ? (
-                    <Link href="/" className="cursor-pointer hover:underline">
-                        {title}
+            <div className="flex items-center gap-3">
+                {/* A titled link is a weak way out — it does not look like one until
+                    you hover it. An arrow beside the title reads as "back" on sight. */}
+                {back && (
+                    <Link
+                        href="/"
+                        aria-label="Back to the registry"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center self-center rounded-lg border border-neutral-300 text-neutral-600 hover:bg-neutral-50"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                            className="h-4 w-4"
+                        >
+                            <path d="M19 12H5" />
+                            <path d="m12 19-7-7 7-7" />
+                        </svg>
                     </Link>
-                ) : (
-                    title
                 )}
-                <p className="text-sm text-neutral-500">
-                    {subtitle ??
-                        "Decisions that cannot both be true, found across threads nobody shares."}
-                </p>
+                <div>
+                    {back ? (
+                        <Link href="/" className="cursor-pointer hover:underline">
+                            {title}
+                        </Link>
+                    ) : (
+                        title
+                    )}
+                    <p className="text-sm text-neutral-500">
+                        {subtitle ??
+                            "Decisions that cannot both be true, found across threads nobody shares."}
+                    </p>
+                </div>
             </div>
             <div className="flex items-center gap-3">
                 <span className={`text-xs ${TONE[link]}`}>{link}</span>

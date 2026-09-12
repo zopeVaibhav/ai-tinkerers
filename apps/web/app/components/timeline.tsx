@@ -266,7 +266,10 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
                                 </div>
 
                                 <div className={`min-w-0 ${expanded ? "break-words" : "truncate"}`}>
-                                    <span className="font-medium text-neutral-900">{entry.by}</span>{" "}
+                                    <span className="font-medium text-neutral-900">{entry.by}</span>
+                                    {/* Who and what read as one sentence with nothing between
+                                        them, and a note is free text that can start any way. */}
+                                    <span className="px-1.5 text-neutral-300">·</span>
                                     <span className="text-neutral-700">{entry.what}</span>
                                 </div>
                             </motion.li>
