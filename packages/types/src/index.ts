@@ -46,6 +46,13 @@ export type Decision = {
 };
 
 /**
+ * The subscription table projected down to what a reader needs: which surface
+ * carries this conflict, and who that window is written for. No identifiers, so
+ * it survives JSON — a Telegram view's chatId is a BigInt and would not.
+ */
+export type ViewSummary = { surface: Surface; audience: Audience };
+
+/**
  * Two decisions that cannot both be true. This is the shared object — the thing
  * that renders in both threads at once and updates in place everywhere.
  */
@@ -60,6 +67,8 @@ export type Conflict = {
     b: Decision;
     framings: Partial<Record<Audience, string>>;
     timeline: TimelineEntry[];
+    /** Every live window onto this conflict. Empty until it has been posted. */
+    views: ViewSummary[];
 };
 
 /**

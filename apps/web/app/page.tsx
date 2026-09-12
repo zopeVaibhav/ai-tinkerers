@@ -84,7 +84,7 @@ export default function Page() {
     }
 
     return (
-        <main className="mx-auto flex max-w-6xl flex-col gap-6 p-8">
+        <main className="mx-auto flex max-w-6xl flex-col gap-6 p-4 sm:p-8">
             <RegistryCopilot
                 conflicts={conflicts}
                 decisions={decisions}
