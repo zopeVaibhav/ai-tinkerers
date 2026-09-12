@@ -62,6 +62,30 @@ export async function candidatesFor(
     return rows.map(toDecision);
 }
 
+/**
+ * Has this room ever recorded this exact claim, superseded or not?
+ *
+ * Deliberately blind to `supersededById`, unlike everything else here. The
+ * channel history the agent re-reads never changes: once a room has said "we
+ * hard-fail on timeout", that sentence stays in the scrollback and extracts
+ * again on the next unrelated message. If the earlier row has since been
+ * superseded it is invisible to `decisionForThread`, so the claim reads as new,
+ * gets recorded again, and recreates a conflict the room already settled — once
+ * per message, forever.
+ */
+export async function claimAlreadyMade(
+    threadKey: string,
+    subsystem: Subsystem,
+    condition: Condition,
+    action: ClaimAction,
+): Promise<Decision | null> {
+    const row = await prisma.decision.findFirst({
+        where: { threadKey, subsystem, condition, action },
+        orderBy: { createdAt: "desc" },
+    });
+    return row ? toDecision(row) : null;
+}
+
 /** The live claim a thread currently stands behind, if it has one. */
 export async function decisionForThread(threadKey: string): Promise<Decision | null> {
     const row = await prisma.decision.findFirst({
