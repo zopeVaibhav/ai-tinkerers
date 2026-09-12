@@ -1,25 +1,44 @@
 @import "tailwindcss";
 
-/**
- * The chat panel floats over the registry instead of pushing it: CopilotKit
- * puts a margin on <body> equal to the panel width, which reflows the whole
- * page every time the panel opens. The panel is an overlay, so the page behind
- * it should not move at all.
- *
- * Width follows the viewport rather than being a constant, and under 768px
- * CopilotKit's own full-screen overlay is already right, so this leaves it be.
- */
-:root {
-    --copilot-panel: clamp(22rem, 34vw, 36rem);
+/** Jumps between sections read as a cut; scrolling there reads as a move. */
+html {
+    scroll-behavior: smooth;
 }
 
-body {
-    margin-right: 0 !important;
-}
-
-@media (min-width: 768px) {
-    aside[data-copilot-sidebar] {
-        --sidebar-width: var(--copilot-panel) !important;
-        width: var(--copilot-panel) !important;
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
     }
+
+    aside[data-copilot-sidebar] {
+        transition: none !important;
+    }
+}
+
+/** Send reads as "off to the right", not "up". The icon ships as an up arrow. */
+[data-testid="copilot-send-button"] svg {
+    transform: rotate(90deg);
+}
+
+/**
+ * No blur on the seam. CopilotKit ships the panel with a shadow-xl, so this
+ * turns that off too and leaves a plain one-pixel edge between the two halves.
+ */
+aside[data-copilot-sidebar] {
+    box-shadow: none !important;
+}
+
+/**
+ * Suggestions sit under the greeting, so they should read as a list of answers
+ * to it rather than a left-aligned toolbar. The stock container is a wrapping
+ * row: this makes it a centred column so each one lands on its own line under
+ * the question, whatever the panel width.
+ */
+[data-testid="copilot-suggestions"] {
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    /* Stock padding is pr-4 against pl-0, which lands the stack 8px left of the heading. */
+    padding-inline: 0 !important;
+    margin-inline: 0 !important;
 }

@@ -228,10 +228,10 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
 
             <div
                 ref={scroller}
-                className="max-h-96 overflow-y-auto rounded-lg border border-neutral-200"
+                className="@container max-h-96 overflow-y-auto rounded-lg border border-neutral-200"
             >
                 {/* Column headings only mean anything once the row is in columns. */}
-                <div className="sticky top-0 z-10 hidden grid-cols-[8rem_11rem_1fr] gap-3 bg-neutral-50 px-3 py-2 text-[11px] tracking-wide text-neutral-400 uppercase sm:grid">
+                <div className="@lg:grid sticky top-0 z-10 hidden grid-cols-[7rem_10rem_1fr] gap-3 bg-neutral-50 px-3 py-2 text-[11px] tracking-wide text-neutral-400 uppercase">
                     <span>Type</span>
                     <span>Time</span>
                     <span>Message</span>
@@ -244,7 +244,7 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
                             <li
                                 key={index}
                                 onClick={() => toggle(open, index, setOpen)}
-                                className="flex cursor-default flex-col gap-1 border-t border-neutral-100 px-3 py-2 text-sm hover:bg-neutral-50 sm:grid sm:grid-cols-[8rem_11rem_1fr] sm:gap-3"
+                                className="@lg:grid @lg:grid-cols-[7rem_10rem_1fr] @lg:gap-3 flex cursor-default flex-col gap-1 border-t border-neutral-100 px-3 py-2 text-sm hover:bg-neutral-50"
                             >
                                 <div className="flex items-center gap-2">
                                     <span
@@ -252,12 +252,12 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
                                     />
                                     <span className="text-neutral-700">{type}</span>
                                     {/* In one column the timestamp rides along with the type. */}
-                                    <span className="ml-auto text-xs text-neutral-400 sm:hidden">
+                                    <span className="@lg:hidden ml-auto text-xs text-neutral-400">
                                         {fullTime(entry.at)}
                                     </span>
                                 </div>
 
-                                <div className="hidden whitespace-nowrap text-neutral-400 sm:block">
+                                <div className="@lg:block hidden whitespace-nowrap text-neutral-400">
                                     {fullTime(entry.at)}
                                 </div>
 

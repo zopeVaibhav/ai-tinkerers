@@ -9,11 +9,18 @@ import { DecisionList } from "./components/decision-list";
 import { RegistryCopilot } from "./components/copilot";
 import { CopilotSidebar } from "@copilotkit/react-core/v2";
 import { STATUS_ORDER, haystack } from "./lib/display";
+import { mockRegistry } from "./lib/fixtures";
+import { SmoothMessageView } from "./components/smooth-chat";
+import { ChatWelcome } from "./components/chat-welcome";
+import { ChatHeader, NoToggleButton } from "./components/chat-chrome";
 
 const SERVER = process.env.NEXT_PUBLIC_SERVER_URL ?? "http://localhost:5101";
 
+/** Build the UI without a server: `NEXT_PUBLIC_MOCK=1 bun run dev`. */
+const MOCK = process.env.NEXT_PUBLIC_MOCK === "1";
+
 type Draft<T> = T extends unknown ? Omit<T, "by"> : never;
-type Link = "connecting" | "live" | "dropped";
+type Link = "connecting" | "live" | "dropped" | "mock";
 
 export default function Page() {
     const [conflicts, setConflicts] = useState<Conflict[]>([]);
@@ -27,6 +34,15 @@ export default function Page() {
 
     useEffect(() => {
         setName(localStorage.getItem("name") ?? "");
+
+        if (MOCK) {
+            const registry = mockRegistry();
+            setConflicts(registry.conflicts);
+            setDecisions(registry.decisions);
+            setLink("mock");
+            return;
+        }
+
         const source = new EventSource(`${SERVER}/stream`);
         source.onopen = () => setLink("live");
         source.onerror = () => setLink("dropped");
@@ -71,6 +87,10 @@ export default function Page() {
 
     /** One write path for the panel, the buttons and the agent alike. */
     async function send(conflictId: string, action: Record<string, unknown>) {
+        if (MOCK) {
+            console.warn("mock mode: no server, action not sent", conflictId, action);
+            return;
+        }
         await fetch(`${SERVER}/conflicts/${conflictId}/action`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -90,7 +110,16 @@ export default function Page() {
                 decisions={decisions}
                 onAct={(conflictId, action) => send(conflictId, action)}
             />
-            <CopilotSidebar />
+            {/* Always open, and not closeable: the registry and the copilot are one
+                screen, so there is no state where the panel is not there. */}
+            <CopilotSidebar
+                width="30%"
+                open
+                messageView={SmoothMessageView}
+                welcomeScreen={ChatWelcome}
+                header={ChatHeader}
+                toggleButton={NoToggleButton}
+            />
             <header className="flex flex-wrap items-baseline justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-medium">Contradiction registry</h1>
@@ -105,7 +134,9 @@ export default function Page() {
                                 ? "text-emerald-600"
                                 : link === "dropped"
                                   ? "text-red-600"
-                                  : "text-neutral-400"
+                                  : link === "mock"
+                                    ? "text-amber-600"
+                                    : "text-neutral-400"
                         }`}
                     >
                         {link}

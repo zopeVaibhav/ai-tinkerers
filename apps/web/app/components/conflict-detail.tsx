@@ -3,10 +3,16 @@
 import { ActionType, Audience, ConflictStatus, Side } from "@repo/types";
 import type { Action, Conflict, Decision } from "@repo/types";
 import { Btn, Prompt } from "./controls";
-import { STATUS_LABEL, STATUS_STYLE, SURFACE_LABEL, fullTime, surfacesFor } from "../lib/display";
+import { STATUS_LABEL, STATUS_STYLE, SURFACE_LABEL, fullTime } from "../lib/display";
 import { Timeline } from "./timeline";
 
 type Draft<T> = T extends unknown ? Omit<T, "by"> : never;
+
+/** What each framing is, rather than where it lands. */
+const FRAMING_LABEL: Record<Audience, string> = {
+    [Audience.Engineer]: "Clash",
+    [Audience.Lead]: "Decision",
+};
 
 export function ConflictDetail({
     conflict,
@@ -97,10 +103,7 @@ export function ConflictDetail({
                         {Object.values(Audience).map((audience) => (
                             <div key={audience} className="flex flex-col gap-1">
                                 <span className="text-xs font-medium tracking-wide text-neutral-500 uppercase">
-                                    {/* The surface is the useful label. The audience name only
-                                        stands in when that reader has no window open — with a
-                                        surface disabled there would otherwise be nothing here. */}
-                                    {surfacesFor(conflict, audience).join(", ") || audience}
+                                    {FRAMING_LABEL[audience]}
                                 </span>
                                 <p className="text-sm text-neutral-700">
                                     {conflict.framings[audience] ?? "—"}
