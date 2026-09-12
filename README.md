@@ -21,23 +21,31 @@ decide opposite things about the same subsystem both threads get told. Read
 
 ## Surfaces
 
-| Surface        | Framing  | Renders                               | Can produce                           | Records decisions      |
-| -------------- | -------- | ------------------------------------- | ------------------------------------- | ---------------------- |
-| Slack thread   | lead     | full Block Kit card, modals, timeline | acknowledge, resolve, supersede, note | yes, by talking in one |
-| Telegram group | engineer | one line, one decision, two buttons   | acknowledge                           | no                     |
-| Web            | both     | canvas, both framings side by side    | acknowledge, resolve, supersede, note | no                     |
+| Surface        | Framing  | Renders                               | Sends today                  | Records decisions      |
+| -------------- | -------- | ------------------------------------- | ---------------------------- | ---------------------- |
+| Slack thread   | lead     | full Block Kit card, modals, timeline | acknowledge, supersede, note | yes, by talking in one |
+| Telegram group | engineer | one line, one decision, two buttons   | acknowledge                  | no                     |
+| Web            | both     | canvas, both framings side by side    | acknowledge, supersede, note | no                     |
+
+`resolve` is in the table in `core/permissions` for Slack and web but no control
+sends it — superseding is what resolves a conflict. `reframe` is in no row at
+all: the agent writes framings through `persist`, not `act`, because no window
+produced it.
 
 Two separate axes, easy to confuse. **Framing** is how the agent words the same
-facts for that window. **Can produce** is what that window is physically able to
-send — Slack has modals, so it can carry the text superseding needs; a Telegram
-callback is 64 bytes with nowhere to type. Neither axis knows who is looking:
-two people in one thread share one window and have identical capability.
+facts for that window. **Sends today** is what that window is physically able to
+produce — Slack has modals, so it can carry the text superseding needs; a
+Telegram callback is 64 bytes with nowhere to type. Neither axis knows who is
+looking: two people in one thread share one window and have identical
+capability.
 
 ## Rules that keep the design honest
 
 1. Nothing travels sideways. No Slack-to-Telegram wire. Every surface talks only
    to the object.
-2. Every inbound event is normalised into one `Action` before it touches the store.
+2. Every inbound event is normalised into one `Action` before it touches the store,
+   and validated on the way in — `parseAction` rejects a shape the reducer would
+   have crashed on.
 3. Capability belongs to the window, not the person — keyed on `Surface`, never on
    seniority. Enforced twice: the renderer does not draw the control, and `act()`
    refuses the action before it reaches the store.
