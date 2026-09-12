@@ -8,7 +8,7 @@ import { addView, dropView, viewsOf } from "../repository";
 let bot: Bot | null = null;
 
 export async function startTelegram(
-    act: (conflictId: string, action: Action, from: Audience) => Promise<unknown>,
+    act: (conflictId: string, action: Action, from: Surface) => Promise<unknown>,
 ) {
     const instance = new Bot(ENV.TELEGRAM_BOT_TOKEN);
 
@@ -22,7 +22,7 @@ export async function startTelegram(
         await ctx.answerCallbackQuery();
         const by = ctx.from?.first_name ?? Surface.Telegram;
         const parsed = parse(ctx.callbackQuery.data, by);
-        if (parsed) await act(parsed.conflictId, parsed.action, Audience.Engineer);
+        if (parsed) await act(parsed.conflictId, parsed.action, Surface.Telegram);
     });
 
     // Long polling. Never await this — it only settles when the bot stops.
