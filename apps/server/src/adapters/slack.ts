@@ -62,7 +62,11 @@ type PromptKey = keyof typeof PROMPTS;
 
 export async function startSlack(
     act: (conflictId: string, action: Action, from: Surface) => Promise<unknown>,
-    onThread: (thread: ThreadRef, messages: Message[], lastSpeaker: string) => Promise<void>,
+    onThread: (
+        thread: ThreadRef,
+        messages: Message[],
+        nameOf: (userId?: string) => Promise<string>,
+    ) => Promise<void>,
 ) {
     const app = new App({
         token: ENV.SLACK_BOT_TOKEN,
@@ -127,8 +131,10 @@ export async function startSlack(
                 threadKey,
                 threadName: await channelName(event.channel),
             };
-            const last = messages[messages.length - 1];
-            await onThread(thread, messages, await personName(last?.by));
+            // The resolver rather than a name: who decided depends on which
+            // sentence the agent picked out, and that is not known until after
+            // extraction. Ids are cached, so resolving later costs nothing.
+            await onThread(thread, messages, personName);
         });
     });
 

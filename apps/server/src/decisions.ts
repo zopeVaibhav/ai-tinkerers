@@ -1,7 +1,7 @@
 import { Surface } from "@repo/types";
 import type { Decision } from "@repo/types";
 import type { Claim } from "./agent/extract";
-import { createDecision, decisionForThread, supersede } from "./repository";
+import { claimAlreadyMade, createDecision, decisionForThread, supersede } from "./repository";
 
 export type ThreadRef = {
     surface: Surface;
@@ -10,25 +10,28 @@ export type ThreadRef = {
 };
 
 /**
- * Re-reading a thread must not pile up duplicate decisions. An unchanged claim
- * is a no-op; a changed one supersedes what the thread said before, and the
- * superseded row stops being visible to conflict detection.
+ * Re-reading a thread must not pile up duplicate decisions. A claim this room
+ * has made before is a no-op even if it was later superseded, because the
+ * message that stated it is still in the scrollback and will extract on every
+ * re-read. A genuinely new claim supersedes whatever the room stood behind, and
+ * the superseded row stops being visible to conflict detection.
  */
 export async function record(
     thread: ThreadRef,
     claim: Claim,
     decidedBy: string,
 ): Promise<{ decision: Decision; changed: boolean } | null> {
-    const previous = await decisionForThread(thread.threadKey);
+    // Asked of every claim the room has ever made, not only the live one: a
+    // superseded claim is still sitting in the scrollback and extracts again.
+    const already = await claimAlreadyMade(
+        thread.threadKey,
+        claim.subsystem,
+        claim.condition,
+        claim.action,
+    );
+    if (already) return { decision: already, changed: false };
 
-    if (
-        previous &&
-        previous.subsystem === claim.subsystem &&
-        previous.condition === claim.condition &&
-        previous.action === claim.action
-    ) {
-        return { decision: previous, changed: false };
-    }
+    const previous = await decisionForThread(thread.threadKey);
 
     const decision = await createDecision({
         surface: thread.surface,
